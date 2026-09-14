@@ -13,7 +13,7 @@ import 'models/match_models.dart';
 // - Real phone (USB/WiFi, same network as your computer)
 //                     -> http://<YOUR_COMPUTER_LOCAL_IP>:8080
 // - iOS Simulator     -> http://localhost:8080
-const String backendBaseUrl = 'http://10.0.2.2:8080';
+const String backendBaseUrl = 'http://192.168.1.100:8080';
 
 // ApiException یعنی سرور جواب داد ولی با یه خطای مشخص (مثلاً پسورد اشتباه).
 // این با NetworkException فرق داره — این یکی یعنی "سرور جواب داد ولی نه".
