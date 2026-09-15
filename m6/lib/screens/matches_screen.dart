@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../api_client.dart';
 import '../models/match_models.dart';
+import 'chat_screen.dart';
 
 class MatchesScreen extends StatefulWidget {
   const MatchesScreen({super.key});
@@ -72,26 +74,36 @@ class _MatchesScreenState extends State<MatchesScreen> {
       itemCount: _matches!.length,
       itemBuilder: (context, index) {
         final m = _matches![index];
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: m.photoUrl.isNotEmpty
-                    ? Image.network('$backendBaseUrl${m.photoUrl}',
-                        fit: BoxFit.cover, width: double.infinity)
-                    : Container(
-                        color: Colors.grey.shade300,
-                        child: const Icon(Icons.person, size: 48, color: Colors.white),
-                      ),
+        return InkWell(
+          onTap: () {
+            HapticFeedback.lightImpact();
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => ChatScreen(match: m)),
+            );
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: m.photoUrl.isNotEmpty
+                      ? Image.network('$backendBaseUrl${m.photoUrl}',
+                          fit: BoxFit.cover, width: double.infinity)
+                      : Container(
+                          color: Colors.grey.shade300,
+                          child: const Icon(Icons.person, size: 48, color: Colors.white),
+                        ),
+                ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(m.name,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.w600)),
-          ],
+              const SizedBox(height: 6),
+              Text(m.name,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+            ],
+          ),
         );
       },
     );

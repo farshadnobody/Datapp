@@ -25,13 +25,21 @@ class _PhotoManagerScreenState extends State<PhotoManagerScreen> {
   @override
   void initState() {
     super.initState();
-    _loadOptions();
+    _loadInitialData();
   }
 
-  Future<void> _loadOptions() async {
+  Future<void> _loadInitialData() async {
     try {
-      final options = await ApiClient.fetchProfileOptions();
-      setState(() => _options = options);
+      final results = await Future.wait([
+        ApiClient.fetchProfileOptions(),
+        ApiClient.fetchMyProfile(),
+      ]);
+      final options = results[0] as ProfileOptions;
+      final profile = results[1] as MyProfile;
+      setState(() {
+        _options = options;
+        _photos = profile.photos; // عکس‌هایی که از قبل آپلود شدن رو نشون بده
+      });
     } catch (e) {
       setState(() => _loadError =
           'دریافت اطلاعات با مشکل مواجه شد. مطمئن شو به سرور وصلی و دوباره امتحان کن.');
@@ -157,7 +165,7 @@ class _PhotoManagerScreenState extends State<PhotoManagerScreen> {
                 ElevatedButton(
                   onPressed: () {
                     setState(() => _loadError = null);
-                    _loadOptions();
+                    _loadInitialData();
                   },
                   child: const Text('تلاش دوباره'),
                 ),

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'auth_session.dart';
 import 'models/profile_models.dart';
 import 'models/match_models.dart';
+import 'models/chat_models.dart';
 
 // ============================================================
 // IMPORTANT: change this depending on how you're running the app
@@ -316,5 +317,37 @@ class ApiClient {
     }
     final list = jsonDecode(response.body) as List;
     return list.map((e) => MatchSummary.fromJson(e)).toList();
+  }
+
+  static Future<List<ChatMessage>> fetchMessages(String withPublicId) async {
+    final uri = Uri.parse('$backendBaseUrl/api/messages/history')
+        .replace(queryParameters: {'with': withPublicId});
+    final response = await _getUri(uri, authenticated: true);
+    if (response.statusCode != 200) {
+      final data = jsonDecode(response.body);
+      throw ApiException(data['error'] ?? 'unknown_error');
+    }
+    final list = jsonDecode(response.body) as List;
+    return list.map((e) => ChatMessage.fromJson(e)).toList();
+  }
+
+  static Future<ChatMessage> sendMessage(String toPublicId, String body) async {
+    final response = await _post('/api/messages', {'to': toPublicId, 'body': body},
+        authenticated: true);
+    final data = jsonDecode(response.body);
+    if (response.statusCode != 200) {
+      throw ApiException(data['error'] ?? 'unknown_error');
+    }
+    return ChatMessage.fromJson(data);
+  }
+
+  // آدرس WebSocket رو از روی همون backendBaseUrl می‌سازه (http -> ws، https -> wss)
+  // و توکن لاگین رو به‌عنوان query param اضافه می‌کنه — چون هندشیک اولیه‌ی
+  // WebSocket نمی‌تونه هدر Authorization معمولی داشته باشه.
+  static String get webSocketUrl {
+    final wsBase = backendBaseUrl
+        .replaceFirst('https://', 'wss://')
+        .replaceFirst('http://', 'ws://');
+    return '$wsBase/ws?token=${AuthSession.token}';
   }
 }
