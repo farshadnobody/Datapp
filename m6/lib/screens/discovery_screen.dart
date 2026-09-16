@@ -26,6 +26,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
   int _minAge = 18;
   int _maxAge = 100;
   double? _maxDistanceKm; // null = بدون محدودیت
+  String? _interestedIn; // دنبال چه کسی می‌گردم — از پروفایل واقعی می‌گیریم
 
   Offset _dragOffset = Offset.zero;
   double _dragAngle = 0;
@@ -72,6 +73,12 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
       if (mounted) setState(() => _options = options);
     } catch (_) {
       // نبود این اختیاریه — فقط برای نشون دادن متن سؤال‌های پرامپت لازمه.
+    }
+    try {
+      final profile = await ApiClient.fetchMyProfile();
+      if (mounted) setState(() => _interestedIn = profile.interestedIn);
+    } catch (_) {
+      // نبودش هم مشکلی نیست؛ فقط تو شیت فیلتر گزینه‌ی فعلی از پیش انتخاب نمی‌شه.
     }
     await _loadMore();
   }
@@ -252,6 +259,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
     int tempMin = _minAge;
     int tempMax = _maxAge;
     double? tempDistance = _maxDistanceKm;
+    String? tempInterestedIn = _interestedIn;
 
     showModalBottomSheet(
       context: context,
@@ -267,6 +275,20 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
                 const Text('فیلترها',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
+                const Text('دنبال چه کسی می‌گردم:'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: (_options?.interestedIn ?? [])
+                      .map((o) => ChoiceChip(
+                            label: Text(o.label),
+                            selected: tempInterestedIn == o.id,
+                            onSelected: (_) =>
+                                setSheetState(() => tempInterestedIn = o.id),
+                          ))
+                      .toList(),
+                ),
+                const SizedBox(height: 20),
                 Text('بازه‌ی سن: $tempMin تا $tempMax'),
                 RangeSlider(
                   min: 18,
@@ -291,13 +313,23 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     HapticFeedback.lightImpact();
                     Navigator.pop(context);
+
+                    if (tempInterestedIn != null && tempInterestedIn != _interestedIn) {
+                      try {
+                        await ApiClient.updateInterestedIn(tempInterestedIn!);
+                      } catch (_) {
+                        // اگه ذخیره نشد، فیلتر رو فقط همین session اعمال می‌کنیم.
+                      }
+                    }
+
                     setState(() {
                       _minAge = tempMin;
                       _maxAge = tempMax;
                       _maxDistanceKm = tempDistance;
+                      _interestedIn = tempInterestedIn;
                       _stack = [];
                     });
                     _loadMore();
@@ -326,9 +358,74 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
           promptTextMap: _promptTextMap,
           interestLabelMap: _interestLabelMap,
           scrollController: scrollController,
+          onSwipe: (direction) => _swipeFromDetail(candidate, direction),
         ),
       ),
     );
+  }
+
+  // برای وقتی از تو شیت جزئیات (چه با تپ رو کارت، چه از نتیجه‌ی جستجو) لایک
+  // یا رد می‌زنی — لازم نیست حتماً تو صف اصلی swipe باشه.
+  Future<void> _swipeFromDetail(DiscoveryCandidate candidate, String direction) async {
+    Navigator.pop(context); // شیت رو ببند
+    _excluded.add(candidate.publicId);
+    setState(() {
+      _stack = _stack.where((c) => c.publicId != candidate.publicId).toList();
+    });
+    try {
+      final result = await ApiClient.swipe(candidate.publicId, direction);
+      if (result.matched && result.match != null && mounted) {
+        _showMatchDialog(result.match!);
+      }
+    } catch (_) {
+      // چیز حیاتی‌ای از دست نرفته؛ بی‌خیال می‌شیم.
+    }
+  }
+
+  void _openSearch() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('جستجو با آیدی'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'آیدی فرد رو وارد کن'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('انصراف'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final id = controller.text.trim();
+              Navigator.pop(context);
+              if (id.isNotEmpty) _searchAndShow(id);
+            },
+            child: const Text('جستجو'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _searchAndShow(String publicId) async {
+    try {
+      final candidate = await ApiClient.fetchDiscoveryProfile(publicId);
+      if (mounted) _openDetail(candidate);
+    } on NetworkException {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('ارتباط با سرور برقرار نشد.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('پروفایلی با این آیدی پیدا نشد.')));
+      }
+    }
   }
 
   @override
@@ -337,6 +434,11 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
       appBar: AppBar(
         title: const Text('کشف'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: 'جستجو با آیدی',
+            onPressed: _openSearch,
+          ),
           IconButton(
             icon: const Icon(Icons.map_outlined),
             tooltip: 'انتخاب موقعیت رو نقشه',
@@ -559,12 +661,14 @@ class _ProfileDetailSheet extends StatelessWidget {
   final Map<String, String> promptTextMap;
   final Map<String, String> interestLabelMap;
   final ScrollController scrollController;
+  final void Function(String direction) onSwipe;
 
   const _ProfileDetailSheet({
     required this.candidate,
     required this.promptTextMap,
     required this.interestLabelMap,
     required this.scrollController,
+    required this.onSwipe,
   });
 
   @override
@@ -625,6 +729,22 @@ class _ProfileDetailSheet extends StatelessWidget {
             ),
           ),
         ],
+        const SizedBox(height: 24),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            OutlinedButton.icon(
+              onPressed: () => onSwipe('pass'),
+              icon: const Icon(Icons.close, color: Colors.red),
+              label: const Text('رد', style: TextStyle(color: Colors.red)),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => onSwipe('like'),
+              icon: const Icon(Icons.favorite),
+              label: const Text('لایک'),
+            ),
+          ],
+        ),
         const SizedBox(height: 24),
       ],
     );

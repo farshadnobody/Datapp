@@ -157,6 +157,7 @@ class MyProfile {
   final List<String> interests;
   final List<PromptAnswer> prompts;
   final List<Photo> photos;
+  final String publicId;
 
   MyProfile({
     required this.name,
@@ -168,6 +169,7 @@ class MyProfile {
     required this.interests,
     required this.prompts,
     required this.photos,
+    required this.publicId,
   });
 
   factory MyProfile.fromJson(Map<String, dynamic> json) => MyProfile(
@@ -184,6 +186,7 @@ class MyProfile {
         photos: (json['photos'] as List? ?? [])
             .map((e) => Photo.fromJson(e))
             .toList(),
+        publicId: json['public_id'] ?? '',
       );
 }
 

@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'screens/start_screen.dart';
 import 'widgets/connection_status_banner.dart';
+import 'network_config.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // قبل از نمایش هر صفحه‌ای، آدرس درست بک‌اند رو بر اساس پلتفرم (وب/امولاتور/
+  // گوشی واقعی) مشخص می‌کنیم — توضیحش تو network_config.dart هست.
+  await NetworkConfig.initialize();
   runApp(const MyApp());
 }
 

@@ -8,13 +8,13 @@ import 'models/match_models.dart';
 import 'models/chat_models.dart';
 
 // ============================================================
-// IMPORTANT: change this depending on how you're running the app
+// این مقدار دستی تنظیم نمی‌شه — موقع استارت اپ (قبل از نمایش هر صفحه‌ای)
+// توسط NetworkConfig.initialize() (تو network_config.dart) بر اساس پلتفرم
+// (وب / امولاتور اندروید / گوشی واقعی) به یکی از سه مقدار ثابت تنظیم می‌شه.
+// اگه IP لپ‌تاپت عوض شد، همون فایل رو ویرایش کن — عمداً هیچ تنظیمات کاربری
+// برای این تو خود اپ نیست.
 // ============================================================
-// - Android Emulator  -> http://10.0.2.2:8080
-// - Real phone (USB/WiFi, same network as your computer)
-//                     -> http://<YOUR_COMPUTER_LOCAL_IP>:8080
-// - iOS Simulator     -> http://localhost:8080
-const String backendBaseUrl = 'http://192.168.1.100:8080';
+String backendBaseUrl = 'http://10.0.2.2:8080';
 
 // ApiException یعنی سرور جواب داد ولی با یه خطای مشخص (مثلاً پسورد اشتباه).
 // این با NetworkException فرق داره — این یکی یعنی "سرور جواب داد ولی نه".
@@ -155,6 +155,16 @@ class ApiClient {
       throw ApiException(data['error'] ?? 'unknown_error');
     }
     return MyProfile.fromJson(jsonDecode(response.body));
+  }
+
+  static Future<void> updateInterestedIn(String interestedIn) async {
+    final response = await _post(
+        '/api/profile/interested-in', {'interested_in': interestedIn},
+        authenticated: true);
+    final data = jsonDecode(response.body);
+    if (response.statusCode != 200) {
+      throw ApiException(data['error'] ?? 'unknown_error');
+    }
   }
 
   static Future<Photo> uploadPhoto(List<int> bytes, String filename) async {
