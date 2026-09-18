@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../api_client.dart';
+import '../auth_session.dart';
 import '../models/profile_models.dart';
 import 'photo_manager_screen.dart';
 
@@ -157,6 +158,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
             .toList(),
       );
       await ApiClient.saveProfile(input);
+      // دفعه‌ی بعد که اپ باز شد مستقیم بره صفحه‌ی اصلی، نه ساخت پروفایل.
+      await AuthSession.setHasProfile(true);
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const PhotoManagerScreen()),

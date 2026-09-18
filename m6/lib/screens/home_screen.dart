@@ -18,8 +18,10 @@ class HomeScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: () {
-              AuthSession.clear();
+            onPressed: () async {
+              // توکن ذخیره‌شده رو هم پاک می‌کنه تا دفعه‌ی بعد دوباره لاگین بخواد.
+              await AuthSession.clear();
+              if (!context.mounted) return;
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => const StartScreen()),
                 (route) => false,

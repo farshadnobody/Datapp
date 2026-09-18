@@ -45,6 +45,14 @@ class LoginResult {
 }
 
 class ApiClient {
+  // اگه سرور به یه درخواست احراز‌هویت‌شده 401 بده یعنی توکن منقضی/نامعتبره:
+  // session پاک می‌شه و کاربر برمی‌گرده به صفحه‌ی شروع (تو main.dart وصل شده).
+  static void _handleUnauthorized(int statusCode, bool authenticated) {
+    if (authenticated && statusCode == 401) {
+      AuthSession.expire();
+    }
+  }
+
   static Future<http.Response> _post(String path, Map<String, dynamic> body,
       {bool authenticated = false}) async {
     final headers = {'Content-Type': 'application/json'};
@@ -52,13 +60,15 @@ class ApiClient {
       headers['Authorization'] = 'Bearer ${AuthSession.token}';
     }
     try {
-      return await http
+      final response = await http
           .post(
             Uri.parse('$backendBaseUrl$path'),
             headers: headers,
             body: jsonEncode(body),
           )
           .timeout(const Duration(seconds: 10));
+      _handleUnauthorized(response.statusCode, authenticated);
+      return response;
     } on TimeoutException {
       throw NetworkException();
     } on SocketException {
@@ -75,9 +85,11 @@ class ApiClient {
       headers['Authorization'] = 'Bearer ${AuthSession.token}';
     }
     try {
-      return await http
+      final response = await http
           .get(Uri.parse('$backendBaseUrl$path'), headers: headers)
           .timeout(const Duration(seconds: 10));
+      _handleUnauthorized(response.statusCode, authenticated);
+      return response;
     } on TimeoutException {
       throw NetworkException();
     } on SocketException {
@@ -242,6 +254,7 @@ class ApiClient {
     try {
       final streamed = await request.send().timeout(const Duration(seconds: 30));
       final response = await http.Response.fromStream(streamed);
+      _handleUnauthorized(response.statusCode, true);
       final data = jsonDecode(response.body);
       if (response.statusCode != 200) {
         throw ApiException(data['error'] ?? 'unknown_error');
@@ -262,7 +275,10 @@ class ApiClient {
       headers['Authorization'] = 'Bearer ${AuthSession.token}';
     }
     try {
-      return await http.get(uri, headers: headers).timeout(const Duration(seconds: 10));
+      final response =
+          await http.get(uri, headers: headers).timeout(const Duration(seconds: 10));
+      _handleUnauthorized(response.statusCode, authenticated);
+      return response;
     } on TimeoutException {
       throw NetworkException();
     } on SocketException {

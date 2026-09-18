@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../api_client.dart';
+import 'auth_ui.dart';
 
 class CodeRequestScreen extends StatefulWidget {
   const CodeRequestScreen({super.key});
@@ -16,7 +17,10 @@ class _CodeRequestScreenState extends State<CodeRequestScreen> {
   String? _errorText;
   RequestCodeResult? _result;
 
+  bool get _canSubmit => isPhoneComplete(_phoneController.text);
+
   Future<void> _submit() async {
+    if (!_canSubmit || _loading) return;
     HapticFeedback.lightImpact();
     setState(() {
       _loading = true;
@@ -25,7 +29,8 @@ class _CodeRequestScreenState extends State<CodeRequestScreen> {
     });
 
     try {
-      final result = await ApiClient.requestCode(_phoneController.text.trim());
+      final result = await ApiClient.requestCode(
+          normalizeDigits(_phoneController.text.trim()));
       setState(() => _result = result);
     } on NetworkException {
       setState(() => _errorText =
@@ -60,87 +65,76 @@ class _CodeRequestScreenState extends State<CodeRequestScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('ثبت‌نام یا فراموشی رمز')),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _phoneController,
-              keyboardType: TextInputType.phone,
-              enabled: _result == null,
-              decoration: const InputDecoration(
-                labelText: 'شماره موبایل',
-                border: OutlineInputBorder(),
-              ),
+    final hasResult = _result != null;
+    return AuthScaffold(
+      bottom: hasResult
+          ? AuthPillButton(label: 'باز کردن ربات بله', onPressed: _openBaleBot)
+          : AuthPillButton(
+              label: 'دریافت کد',
+              loading: _loading,
+              onPressed: _canSubmit ? _submit : null,
             ),
-            if (_errorText != null) ...[
-              const SizedBox(height: 12),
-              Text(_errorText!, style: const TextStyle(color: Colors.red)),
-            ],
-            const SizedBox(height: 20),
-            if (_result == null)
-              ElevatedButton(
-                onPressed: _loading ? null : _submit,
-                child: _loading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 14),
-                        child: Text('دریافت کد', style: TextStyle(fontSize: 16)),
-                      ),
-              )
-            else
-              _buildResultCard(),
-          ],
-        ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AuthTitle(hasResult ? 'کدت آماده‌ست' : 'ثبت‌نام یا فراموشی رمز'),
+          const SizedBox(height: 24),
+          AuthUnderlineField(
+            controller: _phoneController,
+            hint: 'شماره موبایل',
+            enabled: !hasResult,
+            keyboardType: TextInputType.phone,
+            inputFormatters: phoneInputFormatters,
+            textInputAction: TextInputAction.done,
+            onChanged: (_) => setState(() {
+              _errorText = null;
+            }),
+            onSubmitted: (_) => _submit(),
+          ),
+          if (_errorText != null) AuthErrorText(_errorText!),
+          const SizedBox(height: 20),
+          if (!hasResult)
+            const AuthBodyText(
+              'شماره‌ات رو وارد کن تا یه کد برات بسازیم. کد رو تو ربات بله می‌فرستی و نام کاربری و رمز عبورت رو می‌گیری.',
+            )
+          else
+            _buildResult(_result!),
+        ],
       ),
     );
   }
 
-  Widget _buildResultCard() {
+  Widget _buildResult(RequestCodeResult result) {
     // این متن، چه شماره از قبل ثبت‌نام کرده باشه چه نه، دقیقاً همینه — عمداً
     // یکسانه تا کسی نتونه از این صفحه بفهمه چه شماره‌هایی تو سایت ثبت‌نام کردن.
-    final result = _result!;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'کد زیر برات آماده شد. اعتبار: ۱۵ دقیقه.',
-              style: TextStyle(fontSize: 15),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const AuthBodyText('کد زیر برات آماده شد. اعتبار: ۱۵ دقیقه.'),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: SelectableText(
+            result.code,
+            textAlign: TextAlign.center,
+            textDirection: TextDirection.ltr,
+            style: const TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 3,
+              color: AuthColors.text,
             ),
-            const SizedBox(height: 12),
-            SelectableText(
-              result.code,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 2,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _openBaleBot,
-              icon: const Icon(Icons.send),
-              label: const Text('باز کردن ربات بله'),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'یا این کد رو دستی برای ربات @TrustVerifyBot در بله بفرست تا نام کاربری و رمز عبورت رو دریافت کنی.',
-              style: TextStyle(fontSize: 13, color: Colors.grey),
-            ),
-          ],
+          ),
         ),
-      ),
+        const SizedBox(height: 16),
+        const AuthBodyText(
+          'یا این کد رو دستی برای ربات @TrustVerifyBot در بله بفرست تا نام کاربری و رمز عبورت رو دریافت کنی.',
+        ),
+      ],
     );
   }
 }
