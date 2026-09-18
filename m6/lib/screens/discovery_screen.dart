@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import '../api_client.dart';
 import '../models/profile_models.dart';
 import '../models/match_models.dart';
+import '../widgets/profile_detail_sheet.dart';
 import 'location_picker_screen.dart';
 import 'matches_screen.dart';
 
@@ -23,6 +24,10 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
   bool _loading = true;
   String? _error;
 
+  // وقتی true باشه، یعنی تو حالت «دوباره ببین» هستیم — کسایی که قبلاً
+  // لایک/رد/سوپرلایک کردی هم نشون داده می‌شن (با نشونه‌ی وضعیتشون).
+  bool _browsingAgain = false;
+
   int _minAge = 18;
   int _maxAge = 100;
   double? _maxDistanceKm; // null = بدون محدودیت
@@ -33,6 +38,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
 
   late AnimationController _exitController;
   Offset _exitTarget = Offset.zero;
+  String _pendingDirection = 'pass'; // برای وقتی از دکمه (نه کشیدن) exit می‌شه
 
   @override
   void initState() {
@@ -114,6 +120,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
         maxAge: _maxAge,
         maxDistanceKm: _maxDistanceKm,
         exclude: _excluded.toList(),
+        includeSwiped: _browsingAgain,
       );
       if (mounted) setState(() => _stack = [..._stack, ...candidates]);
     } on NetworkException {
@@ -129,6 +136,18 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
     }
   }
 
+  // دکمه‌ی «دوباره ببین» تو حالت «همه رو دیدی» — فیلترهای فعلی رو نگه می‌داره،
+  // فقط اجازه می‌ده کسایی که قبلاً swipe کردی هم دوباره نشون داده بشن.
+  void _seeEveryoneAgain() {
+    HapticFeedback.lightImpact();
+    setState(() {
+      _browsingAgain = true;
+      _stack = [];
+      _excluded.clear();
+    });
+    _loadMore();
+  }
+
   void _onPanUpdate(DragUpdateDetails details) {
     setState(() {
       _dragOffset += details.delta;
@@ -137,11 +156,17 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
   }
 
   void _onPanEnd(DragEndDetails details) {
-    const threshold = 100;
+    const threshold = 100.0;
+
+    // اگه بیشتر عمودی کشیده شده باشه (نه افقی)، یعنی قصدش سوپرلایکه.
+    if (_dragOffset.dy < -threshold && _dragOffset.dy.abs() > _dragOffset.dx.abs()) {
+      _trySuperLikeExit();
+      return;
+    }
     if (_dragOffset.dx > threshold) {
-      _animateExit(right: true);
+      _animateExit('like');
     } else if (_dragOffset.dx < -threshold) {
-      _animateExit(right: false);
+      _animateExit('pass');
     } else {
       setState(() {
         _dragOffset = Offset.zero;
@@ -150,20 +175,43 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
     }
   }
 
-  void _animateExit({required bool right}) {
+  // اگه کسی که الان بالای صفه‌ست قبلاً سوپرلایک شده، دوباره نمی‌شه سوپرلایکش
+  // کرد — کارت رو برمی‌گردونیم و یه پیام کوتاه نشون می‌دیم.
+  void _trySuperLikeExit() {
+    if (_stack.isNotEmpty && _stack.first.previousDirection == 'super_like') {
+      setState(() {
+        _dragOffset = Offset.zero;
+        _dragAngle = 0;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('قبلاً این فرد رو سوپرلایک کردی.')));
+      return;
+    }
+    _animateExit('super_like');
+  }
+
+  void _animateExit(String direction) {
     if (_stack.isEmpty || _exitController.isAnimating) return;
     HapticFeedback.mediumImpact();
-    _exitTarget = Offset(right ? 600 : -600, _dragOffset.dy);
+    _pendingDirection = direction;
+    switch (direction) {
+      case 'like':
+        _exitTarget = Offset(600, _dragOffset.dy);
+        break;
+      case 'pass':
+        _exitTarget = Offset(-600, _dragOffset.dy);
+        break;
+      case 'super_like':
+        _exitTarget = Offset(_dragOffset.dx, -600);
+        break;
+    }
     _exitController.forward(from: 0);
   }
 
-  // نکته: قبلاً swipe فقط کارت رو از صف حذف می‌کنه (تو همون session) — از الان
-  // واقعاً به بک‌اند ثبت می‌شه (منتظرش نمی‌مونیم تا UI قفل نشه) و اگه لایک
-  // متقابل باشه، پیام «متچ شدی!» نشون داده می‌شه.
   void _finishSwipe() {
     if (_stack.isEmpty) return;
     final swiped = _stack.first;
-    final direction = _exitTarget.dx > 0 ? 'like' : 'pass';
+    final direction = _pendingDirection;
 
     _excluded.add(swiped.publicId);
     setState(() {
@@ -184,6 +232,21 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
       // اگه ثبت swipe شکست بخوره، فقط بی‌خیال می‌شیم — کارت که رد شده برنمی‌گرده،
       // ولی چیز حیاتی‌ای هم از دست نرفته.
     });
+  }
+
+  Future<void> _removeLike(DiscoveryCandidate candidate) async {
+    HapticFeedback.lightImpact();
+    setState(() {
+      _stack = _stack.where((c) => c.publicId != candidate.publicId).toList();
+    });
+    try {
+      await ApiClient.removeLike(candidate.publicId);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('حذف لایک با مشکل مواجه شد.')));
+      }
+    }
   }
 
   void _showMatchDialog(MatchSummary match) {
@@ -353,7 +416,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
         initialChildSize: 0.85,
         maxChildSize: 0.95,
         expand: false,
-        builder: (context, scrollController) => _ProfileDetailSheet(
+        builder: (context, scrollController) => ProfileDetailSheet(
           candidate: candidate,
           promptTextMap: _promptTextMap,
           interestLabelMap: _interestLabelMap,
@@ -364,8 +427,8 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
     );
   }
 
-  // برای وقتی از تو شیت جزئیات (چه با تپ رو کارت، چه از نتیجه‌ی جستجو) لایک
-  // یا رد می‌زنی — لازم نیست حتماً تو صف اصلی swipe باشه.
+  // برای وقتی از تو شیت جزئیات (چه با تپ رو کارت، چه از نتیجه‌ی جستجو) لایک/
+  // رد/سوپرلایک می‌زنی — لازم نیست حتماً تو صف اصلی swipe باشه.
   Future<void> _swipeFromDetail(DiscoveryCandidate candidate, String direction) async {
     Navigator.pop(context); // شیت رو ببند
     _excluded.add(candidate.publicId);
@@ -376,6 +439,11 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
       final result = await ApiClient.swipe(candidate.publicId, direction);
       if (result.matched && result.match != null && mounted) {
         _showMatchDialog(result.match!);
+      }
+    } on ApiException catch (e) {
+      if (e.code == 'already_super_liked' && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('قبلاً این فرد رو سوپرلایک کردی.')));
       }
     } catch (_) {
       // چیز حیاتی‌ای از دست نرفته؛ بی‌خیال می‌شیم.
@@ -432,7 +500,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('کشف'),
+        title: Text(_browsingAgain ? 'کشف (بازبینی)' : 'کشف'),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
@@ -477,21 +545,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
       );
     }
     if (_stack.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.explore_off, size: 48, color: Colors.grey),
-            const SizedBox(height: 12),
-            const Text(
-              'کسی برای نشون دادن نمونده. فیلترهات رو باز کن یا بعداً سر بزن.',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(onPressed: _openFilters, child: const Text('تنظیم فیلترها')),
-          ]),
-        ),
-      );
+      return _buildEmptyState();
     }
 
     return Column(
@@ -520,6 +574,48 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
     );
   }
 
+  Widget _buildEmptyState() {
+    // حالت عادی که هیچ‌کس (حتی قبلاً swipe‌شده) موجود نیست — یعنی هیچ‌کس تو
+    // شعاع/بازه‌ی فیلترت اصلاً وجود نداره.
+    if (_browsingAgain) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.explore_off, size: 48, color: Colors.grey),
+            const SizedBox(height: 12),
+            const Text('کسی با این فیلترها پیدا نشد.', textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            ElevatedButton(onPressed: _openFilters, child: const Text('تنظیم فیلترها')),
+          ]),
+        ),
+      );
+    }
+
+    // حالت «همه رو دیدی» — پیشنهاد می‌دیم دوباره (با اولویت‌بندی) نگاهی بندازه.
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('🎉', style: TextStyle(fontSize: 48)),
+          const SizedBox(height: 12),
+          const Text('همه رو دیدی!',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          const Text('همه‌ی افراد اطرافت رو دیدی.', textAlign: TextAlign.center),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: _seeEveryoneAgain,
+            icon: const Icon(Icons.refresh),
+            label: const Text('دوباره ببین'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(onPressed: _openFilters, child: const Text('تنظیم فیلترها')),
+        ]),
+      ),
+    );
+  }
+
   Widget _buildTopCard(DiscoveryCandidate candidate) {
     return GestureDetector(
       onPanUpdate: _onPanUpdate,
@@ -532,7 +628,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
           child: Stack(
             children: [
               _buildCardContent(candidate),
-              if (_dragOffset.dx > 0)
+              if (_dragOffset.dx > 0 && _dragOffset.dx.abs() >= _dragOffset.dy.abs())
                 Positioned(
                   top: 24,
                   left: 24,
@@ -541,13 +637,25 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
                     child: _buildBadge('لایک', Colors.green, -0.3),
                   ),
                 ),
-              if (_dragOffset.dx < 0)
+              if (_dragOffset.dx < 0 && _dragOffset.dx.abs() >= _dragOffset.dy.abs())
                 Positioned(
                   top: 24,
                   right: 24,
                   child: Opacity(
                     opacity: (-_dragOffset.dx / 100).clamp(0, 1),
                     child: _buildBadge('رد', Colors.red, 0.3),
+                  ),
+                ),
+              if (_dragOffset.dy < 0 && _dragOffset.dy.abs() > _dragOffset.dx.abs())
+                Positioned(
+                  top: 24,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Opacity(
+                      opacity: (-_dragOffset.dy / 100).clamp(0, 1),
+                      child: _buildBadge('سوپرلایک', Colors.blue, 0),
+                    ),
                   ),
                 ),
             ],
@@ -590,6 +698,13 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
                 color: Colors.grey.shade300,
                 child: const Icon(Icons.person, size: 96, color: Colors.white),
               ),
+            // فقط تو حالت «دوباره ببین» نشون داده می‌شه — وضعیت قبلی این فرد.
+            if (_browsingAgain && candidate.previousDirection != null)
+              Positioned(
+                top: 12,
+                right: 12,
+                child: _statusBadge(candidate.previousDirection!),
+              ),
             Positioned(
               left: 0,
               right: 0,
@@ -607,11 +722,22 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('${candidate.name}, ${candidate.age}',
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold)),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text('${candidate.name}, ${candidate.age}',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold)),
+                        ),
+                        // دکمه‌ی سریع برای رفتن به جزئیات کامل پروفایل، کنار اسم.
+                        IconButton(
+                          icon: const Icon(Icons.info_outline, color: Colors.white),
+                          onPressed: () => _openDetail(candidate),
+                        ),
+                      ],
+                    ),
                     if (candidate.distanceKm != null)
                       Text('${candidate.distanceKm} کیلومتر دورتر',
                           style: const TextStyle(color: Colors.white70, fontSize: 13)),
@@ -625,17 +751,49 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
     );
   }
 
+  Widget _statusBadge(String direction) {
+    final (icon, label, color) = switch (direction) {
+      'like' => (Icons.favorite, 'لایک کردی', Colors.pink),
+      'super_like' => (Icons.star, 'سوپرلایک کردی', Colors.blue),
+      _ => (Icons.close, 'رد کردی', Colors.grey),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: Colors.white),
+          const SizedBox(width: 4),
+          Text(label, style: const TextStyle(color: Colors.white, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActionButtons() {
+    final topCandidate = _stack.isNotEmpty ? _stack.first : null;
+    final alreadyLiked = topCandidate?.previousDirection == 'like' ||
+        topCandidate?.previousDirection == 'super_like';
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _actionButton(Icons.close, Colors.red, () => _animateExit(right: false)),
-          _actionButton(Icons.info_outline, Colors.blue, () {
-            if (_stack.isNotEmpty) _openDetail(_stack.first);
-          }, small: true),
-          _actionButton(Icons.favorite, Colors.green, () => _animateExit(right: true)),
+          _actionButton(Icons.close, Colors.red, () => _animateExit('pass')),
+          _actionButton(Icons.star, Colors.blue, _trySuperLikeExit, small: true),
+          // تو حالت «دوباره ببین»، رو کسی که قبلاً لایک/سوپرلایک کردی، به‌جای
+          // دکمه‌ی لایک، دکمه‌ی «حذف لایک» نشون می‌دیم.
+          if (_browsingAgain && alreadyLiked)
+            _actionButton(Icons.delete_outline, Colors.grey, () {
+              if (topCandidate != null) _removeLike(topCandidate);
+            })
+          else
+            _actionButton(Icons.favorite, Colors.green, () => _animateExit('like')),
         ],
       ),
     );
@@ -652,101 +810,6 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
         backgroundColor: Colors.white,
         child: Icon(icon, color: color, size: small ? 20 : 28),
       ),
-    );
-  }
-}
-
-class _ProfileDetailSheet extends StatelessWidget {
-  final DiscoveryCandidate candidate;
-  final Map<String, String> promptTextMap;
-  final Map<String, String> interestLabelMap;
-  final ScrollController scrollController;
-  final void Function(String direction) onSwipe;
-
-  const _ProfileDetailSheet({
-    required this.candidate,
-    required this.promptTextMap,
-    required this.interestLabelMap,
-    required this.scrollController,
-    required this.onSwipe,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      controller: scrollController,
-      padding: const EdgeInsets.all(20),
-      children: [
-        if (candidate.photos.isNotEmpty)
-          SizedBox(
-            height: 320,
-            child: PageView(
-              children: candidate.photos
-                  .map((p) => ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.network('$backendBaseUrl${p.url}', fit: BoxFit.cover),
-                      ))
-                  .toList(),
-            ),
-          ),
-        const SizedBox(height: 16),
-        Text('${candidate.name}, ${candidate.age}',
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-        if (candidate.distanceKm != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text('${candidate.distanceKm} کیلومتر دورتر',
-                style: TextStyle(color: Colors.grey.shade600)),
-          ),
-        if (candidate.bio.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          Text(candidate.bio),
-        ],
-        if (candidate.interests.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: candidate.interests
-                .map((id) => Chip(label: Text(interestLabelMap[id] ?? id)))
-                .toList(),
-          ),
-        ],
-        for (final prompt in candidate.prompts) ...[
-          const SizedBox(height: 16),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(promptTextMap[prompt.promptId] ?? '',
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 6),
-                  Text(prompt.answer),
-                ],
-              ),
-            ),
-          ),
-        ],
-        const SizedBox(height: 24),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            OutlinedButton.icon(
-              onPressed: () => onSwipe('pass'),
-              icon: const Icon(Icons.close, color: Colors.red),
-              label: const Text('رد', style: TextStyle(color: Colors.red)),
-            ),
-            ElevatedButton.icon(
-              onPressed: () => onSwipe('like'),
-              icon: const Icon(Icons.favorite),
-              label: const Text('لایک'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-      ],
     );
   }
 }

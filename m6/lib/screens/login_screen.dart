@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../api_client.dart';
 import '../auth_session.dart';
+import '../push_notifications.dart';
 import 'code_request_screen.dart';
 import 'home_screen.dart';
 import 'profile_setup_screen.dart';
@@ -32,6 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordController.text,
       );
       AuthSession.set(result.token, _phoneController.text.trim());
+      PushNotifications.registerToken(); // منتظرش نمی‌مونیم؛ اگه نشد، بی‌خیال می‌شیم
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(

@@ -167,6 +167,15 @@ class ApiClient {
     }
   }
 
+  static Future<void> registerPushToken(String token) async {
+    final response =
+        await _post('/api/push/register', {'token': token}, authenticated: true);
+    final data = jsonDecode(response.body);
+    if (response.statusCode != 200) {
+      throw ApiException(data['error'] ?? 'unknown_error');
+    }
+  }
+
   static Future<Photo> uploadPhoto(List<int> bytes, String filename) async {
     final data = await _uploadFile('/api/profile/photos', bytes, filename);
     return Photo.fromJson(data);
@@ -279,12 +288,14 @@ class ApiClient {
     double? maxDistanceKm,
     int limit = 20,
     List<String> exclude = const [],
+    bool includeSwiped = false,
   }) async {
     final params = <String, String>{'limit': '$limit'};
     if (minAge != null) params['min_age'] = '$minAge';
     if (maxAge != null) params['max_age'] = '$maxAge';
     if (maxDistanceKm != null) params['max_distance_km'] = '$maxDistanceKm';
     if (exclude.isNotEmpty) params['exclude'] = exclude.join(',');
+    if (includeSwiped) params['mode'] = 'all';
 
     final uri =
         Uri.parse('$backendBaseUrl/api/discovery').replace(queryParameters: params);
@@ -295,6 +306,15 @@ class ApiClient {
     }
     final list = jsonDecode(response.body) as List;
     return list.map((e) => DiscoveryCandidate.fromJson(e)).toList();
+  }
+
+  static Future<void> removeLike(String publicId) async {
+    final response = await _post('/api/matches/remove-like', {'public_id': publicId},
+        authenticated: true);
+    final data = jsonDecode(response.body);
+    if (response.statusCode != 200) {
+      throw ApiException(data['error'] ?? 'unknown_error');
+    }
   }
 
   static Future<DiscoveryCandidate> fetchDiscoveryProfile(String publicId) async {

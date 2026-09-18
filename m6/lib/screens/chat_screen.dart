@@ -5,6 +5,8 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../api_client.dart';
 import '../models/match_models.dart';
 import '../models/chat_models.dart';
+import '../models/profile_models.dart';
+import '../widgets/profile_detail_sheet.dart';
 
 class ChatScreen extends StatefulWidget {
   final MatchSummary match;
@@ -120,6 +122,45 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _openProfile() async {
+    HapticFeedback.lightImpact();
+    try {
+      final results = await Future.wait([
+        ApiClient.fetchDiscoveryProfile(widget.match.publicId),
+        ApiClient.fetchProfileOptions(),
+      ]);
+      final candidate = results[0] as DiscoveryCandidate;
+      final options = results[1] as ProfileOptions;
+      if (!mounted) return;
+
+      final promptTextMap = {for (final p in options.prompts) p.id: p.text};
+      final interestLabelMap = {for (final i in options.interests) i.id: i.label};
+
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        builder: (context) => DraggableScrollableSheet(
+          initialChildSize: 0.85,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (context, scrollController) => ProfileDetailSheet(
+            candidate: candidate,
+            promptTextMap: promptTextMap,
+            interestLabelMap: interestLabelMap,
+            scrollController: scrollController,
+            // onSwipe عمداً پاس داده نمی‌شه — چون از قبل متچ شدین، دکمه‌ی
+            // لایک/رد این‌جا معنی نداره.
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('دریافت پروفایل با مشکل مواجه شد.')));
+      }
+    }
+  }
+
   @override
   void dispose() {
     _channel?.sink.close();
@@ -131,7 +172,19 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.match.name)),
+      appBar: AppBar(
+        title: InkWell(
+          onTap: _openProfile,
+          child: Text(widget.match.name),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            tooltip: 'مشاهده‌ی پروفایل',
+            onPressed: _openProfile,
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(child: _buildMessages()),

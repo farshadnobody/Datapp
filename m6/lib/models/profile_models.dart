@@ -199,6 +199,7 @@ class DiscoveryCandidate {
   final List<PromptAnswer> prompts;
   final List<Photo> photos;
   final double? distanceKm;
+  final String? previousDirection; // null یعنی هیچ‌وقت swipe نشده
 
   DiscoveryCandidate({
     required this.publicId,
@@ -209,6 +210,7 @@ class DiscoveryCandidate {
     required this.prompts,
     required this.photos,
     required this.distanceKm,
+    this.previousDirection,
   });
 
   factory DiscoveryCandidate.fromJson(Map<String, dynamic> json) =>
@@ -227,5 +229,6 @@ class DiscoveryCandidate {
         distanceKm: json['distance_km'] == null
             ? null
             : (json['distance_km'] as num).toDouble(),
+        previousDirection: json['previous_direction'],
       );
 }
