@@ -6,7 +6,7 @@ import '../push_notifications.dart';
 import 'auth_ui.dart';
 import 'code_request_screen.dart';
 import 'home_screen.dart';
-import 'profile_setup_screen.dart';
+import 'onboarding_flow.dart';
 
 // مرحله‌ی دوم ورود: رمز عبور. منطق لاگین همون قبلیه (ApiClient.login).
 class LoginPasswordScreen extends StatefulWidget {
@@ -47,7 +47,7 @@ class _LoginPasswordScreenState extends State<LoginPasswordScreen> {
         MaterialPageRoute(
           builder: (_) => result.hasProfile
               ? const HomeScreen()
-              : const ProfileSetupScreen(),
+              : const OnboardingWelcomeScreen(),
         ),
         (route) => false,
       );

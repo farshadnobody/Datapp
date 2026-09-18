@@ -98,6 +98,21 @@ class ProfileInput {
   final List<String> interests;
   final List<PromptAnswer> prompts;
 
+  // --- فیلدهای جدید اونبوردینگ (سبک تیندر) ---
+  // همه‌شون اختیاری‌ان تا کدهای قبلی (مثل edit_profile_screen.dart) بدون
+  // تغییر کامپایل بشن. برای این‌که واقعاً ذخیره بشن، باید ستون/فیلد معادل
+  // رو تو بک‌اند (Go) هم اضافه کنی — الان فقط تو JSON خروجی می‌رن.
+  final List<String> genders; // چندانتخابی (Man/Woman/Beyond Binary/...)
+  final bool showGenderOnProfile;
+  final List<String> sexualOrientations;
+  final bool showOrientationOnProfile;
+  final List<String> interestedInMulti; // Men/Women/Beyond Binary/Everyone
+  final String? lookingFor; // هدف رابطه (تک‌انتخابی)
+  final String? educationLevel;
+  final String? school;
+  final Map<String, String> lifestyle; // مثلا {"drinking": "socially", ...}
+  final Map<String, String> aboutYou; // مثلا {"communication": "phone_caller", ...}
+
   ProfileInput({
     required this.name,
     required this.birthDate,
@@ -106,6 +121,16 @@ class ProfileInput {
     required this.bio,
     required this.interests,
     required this.prompts,
+    this.genders = const [],
+    this.showGenderOnProfile = true,
+    this.sexualOrientations = const [],
+    this.showOrientationOnProfile = false,
+    this.interestedInMulti = const [],
+    this.lookingFor,
+    this.educationLevel,
+    this.school,
+    this.lifestyle = const {},
+    this.aboutYou = const {},
   });
 
   Map<String, dynamic> toJson() => {
@@ -116,6 +141,16 @@ class ProfileInput {
         'bio': bio,
         'interests': interests,
         'prompts': prompts.map((p) => p.toJson()).toList(),
+        'genders': genders,
+        'show_gender_on_profile': showGenderOnProfile,
+        'sexual_orientations': sexualOrientations,
+        'show_orientation_on_profile': showOrientationOnProfile,
+        'interested_in_multi': interestedInMulti,
+        if (lookingFor != null) 'looking_for': lookingFor,
+        if (educationLevel != null) 'education_level': educationLevel,
+        if (school != null && school!.isNotEmpty) 'school': school,
+        'lifestyle': lifestyle,
+        'about_you': aboutYou,
       };
 }
 

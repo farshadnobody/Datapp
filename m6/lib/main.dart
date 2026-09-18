@@ -4,7 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'auth_session.dart';
 import 'screens/start_screen.dart';
 import 'screens/home_screen.dart';
-import 'screens/profile_setup_screen.dart';
+import 'screens/onboarding_flow.dart';
 import 'widgets/connection_status_banner.dart';
 import 'network_config.dart';
 import 'push_notifications.dart';
@@ -54,7 +54,7 @@ class MyApp extends StatelessWidget {
     if (!AuthSession.isLoggedIn) return const StartScreen();
     return AuthSession.hasProfile
         ? const HomeScreen()
-        : const ProfileSetupScreen();
+        : const OnboardingWelcomeScreen();
   }
 
   @override
