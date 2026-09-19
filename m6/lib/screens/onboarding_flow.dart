@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -12,13 +11,19 @@ import '../onboarding/onboarding_data.dart';
 import 'auth_ui.dart'; // AuthColors, kAppName
 import 'home_screen.dart';
 
-/// رنگ‌های اختصاصیِ این فلو (تم تیره، هم‌رنگ با AuthColors.red تا برند اپ
-/// یکدست بمونه — این عمداً کپیِ پالت هیچ اپ خاصی نیست).
+/// حداکثر طول بیو و جواب پرامپت — تو صفحه‌های «اضافه کردن بیو» و «جواب به
+/// پرامپت» استفاده می‌شن.
+const int kOnboardingMaxBio = 500;
+const int kOnboardingMaxPromptAnswer = 150;
+
+/// رنگ‌های اختصاصیِ این فلو (تم تیره، نزدیک به حس‌وحال تیندر ولی عیناً
+/// همون کد رنگی نیست — کارت‌ها تقریباً مشکی، حاشیه‌ها خاکستری تیره، متن
+/// کم‌رنگ‌ها خاکستری روشن‌تر، و قرمز برند خودمون برای نوار پیشرفت).
 class _OB {
   static const bg = Colors.black;
-  static const card = Color(0xFF1C1C1E);
-  static const border = Color(0xFF3A3A3C);
-  static const muted = Color(0xFF9B9B9E);
+  static const card = Color(0xFF121214);
+  static const border = Color(0xFF35353A);
+  static const muted = Color(0xFFA6A6AA);
   static const accent = AuthColors.red;
 }
 
@@ -145,7 +150,7 @@ class _RuleItem extends StatelessWidget {
 }
 
 /// خودِ فلوی چندمرحله‌ای: هر سؤال یه صفحه، با نوار پیشرفت بالا، دکمه‌ی
-/// برگشت، و دکمه‌ی «رد کردن» برای مراحل اختیاری.
+/// برگشت، و دکمه‌ی «رد کردن» فقط برای مراحل اختیاری.
 class OnboardingFlowScreen extends StatefulWidget {
   const OnboardingFlowScreen({super.key});
 
@@ -166,9 +171,7 @@ enum _Step {
   aboutYou,
   interests,
   photos,
-  bio,
-  prompt,
-  location,
+  bioAndPrompts,
 }
 
 class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
@@ -176,12 +179,13 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
   int _index = 0;
   final _steps = _Step.values;
 
-  ProfileOptions? _serverOptions; // برای گرفتن لیست prompts/limits از بک‌اند
+  ProfileOptions? _serverOptions; // برای گرفتن لیست prompts از بک‌اند
   bool _loadingOptions = true;
 
   // --- state جواب‌ها ---
   final _nameController = TextEditingController();
-  DateTime _birthDate = DateTime(2000, 1, 1);
+  final _birthDateInputController = TextEditingController();
+  DateTime? _birthDate;
   final Set<String> _genders = {};
   bool _showGenderOnProfile = true;
   final Set<String> _orientations = {};
@@ -193,20 +197,15 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
   final Map<String, String> _lifestyle = {};
   final Map<String, String> _aboutYou = {};
   final Set<String> _interests = {};
+  final Set<String> _expandedInterestCats = {};
   final List<XFile> _photos = [];
   final _bioController = TextEditingController();
   String? _selectedPromptId;
   String? _selectedPromptText;
   final _promptAnswerController = TextEditingController();
 
-  bool _submitting = false;
-  String? _submitError;
-
   static const int _maxInterests = 10;
-  static const int _minPhotos = 2;
-  static const int _maxPhotos = 9;
-  static const int _maxBioLength = 500;
-  static const int _maxPromptLength = 150;
+  static const int _maxPhotos = 6;
 
   @override
   void initState() {
@@ -231,6 +230,7 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
   void dispose() {
     _pageController.dispose();
     _nameController.dispose();
+    _birthDateInputController.dispose();
     _schoolController.dispose();
     _bioController.dispose();
     _promptAnswerController.dispose();
@@ -238,46 +238,77 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
   }
 
   int get _age {
+    final birthDate = _birthDate;
+    if (birthDate == null) return 0;
     final now = DateTime.now();
-    int age = now.year - _birthDate.year;
-    final hadBirthday = (now.month > _birthDate.month) ||
-        (now.month == _birthDate.month && now.day >= _birthDate.day);
+    int age = now.year - birthDate.year;
+    final hadBirthday = (now.month > birthDate.month) ||
+        (now.month == birthDate.month && now.day >= birthDate.day);
     if (!hadBirthday) age--;
     return age;
   }
+
+  /// از رشته‌ی خام اعدادی که کاربر با کیبرد تایپ کرده (بدون خط تیره) یه
+  /// تاریخ معتبر می‌سازه، یا اگه هنوز کامل/معتبر نیست null برمی‌گردونه.
+  DateTime? _parseBirthDigits(String digits) {
+    if (digits.length != 8) return null;
+    final month = int.tryParse(digits.substring(0, 2));
+    final day = int.tryParse(digits.substring(2, 4));
+    final year = int.tryParse(digits.substring(4, 8));
+    if (month == null || day == null || year == null) return null;
+    if (month < 1 || month > 12) return null;
+    if (day < 1 || day > 31) return null;
+    if (year < 1900 || year > DateTime.now().year) return null;
+    final d = DateTime(year, month, day);
+    if (d.month != month || d.day != day) return null; // روزهای نامعتبر مثل ۳۱ فوریه
+    return d;
+  }
+
+  bool get _hasBio => _bioController.text.trim().isNotEmpty;
+  bool get _hasPromptAnswer =>
+      _selectedPromptId != null && _promptAnswerController.text.trim().isNotEmpty;
 
   bool get _currentValid {
     switch (_steps[_index]) {
       case _Step.name:
         return _nameController.text.trim().isNotEmpty;
       case _Step.birthday:
-        return _age >= 18;
+        return _birthDate != null && _age >= 18;
       case _Step.gender:
         return _genders.isNotEmpty;
       case _Step.orientation:
-        return true; // اختیاریه، «رد کردن» هم داره
+        return _orientations.isNotEmpty;
       case _Step.seeing:
         return _seeing.isNotEmpty;
       case _Step.lookingFor:
-        return true;
+        return _lookingFor != null;
       case _Step.education:
-        return true;
+        return _education != null;
       case _Step.school:
-        return true;
+        return _schoolController.text.trim().isNotEmpty;
       case _Step.lifestyle:
-        return true;
+        return _lifestyle.isNotEmpty;
       case _Step.aboutYou:
-        return true;
+        return _aboutYou.isNotEmpty;
       case _Step.interests:
-        return true;
+        return _interests.isNotEmpty;
       case _Step.photos:
-        return _photos.length >= _minPhotos;
-      case _Step.bio:
-        return _bioController.text.length <= _maxBioLength;
-      case _Step.prompt:
-        return true;
-      case _Step.location:
-        return true;
+        return _photos.isNotEmpty;
+      case _Step.bioAndPrompts:
+        return _hasBio || _hasPromptAnswer;
+    }
+  }
+
+  String _nextLabel(_Step step) {
+    switch (step) {
+      case _Step.lifestyle:
+        return 'بعدی ${_lifestyle.length}/${kLifestyleCategories.length}';
+      case _Step.aboutYou:
+        return 'بعدی ${_aboutYou.length}/${kAboutYouCategories.length}';
+      case _Step.interests:
+        return 'بعدی ${_interests.length}/$_maxInterests';
+      default:
+        return 'بعدی';
     }
   }
 
@@ -289,7 +320,7 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
       if (confirmed != true) return;
     }
     if (_index == _steps.length - 1) {
-      await _finishOnboarding();
+      await _goToLocationScreen();
       return;
     }
     setState(() => _index++);
@@ -311,12 +342,18 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
   void _skip() {
     HapticFeedback.lightImpact();
     if (_index == _steps.length - 1) {
-      _finishOnboarding();
+      _goToLocationScreen();
       return;
     }
     setState(() => _index++);
     _pageController.animateToPage(_index,
         duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+  }
+
+  Future<void> _goToLocationScreen() async {
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => _LocationPermissionScreen(onAllow: _submitEverything),
+    ));
   }
 
   Future<bool?> _showNameConfirmSheet() {
@@ -373,67 +410,56 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
     );
   }
 
-  Future<void> _finishOnboarding() async {
-    setState(() {
-      _submitting = true;
-      _submitError = null;
-    });
-    try {
-      final prompts = <PromptAnswer>[];
-      if (_selectedPromptId != null &&
-          _promptAnswerController.text.trim().isNotEmpty) {
-        prompts.add(PromptAnswer(
-          promptId: _selectedPromptId!,
-          answer: _promptAnswerController.text.trim(),
-        ));
-      }
-
-      final input = ProfileInput(
-        name: _nameController.text.trim(),
-        birthDate:
-            '${_birthDate.year.toString().padLeft(4, '0')}-${_birthDate.month.toString().padLeft(2, '0')}-${_birthDate.day.toString().padLeft(2, '0')}',
-        // اگه بک‌اند هنوز چندانتخابی نداره، اولین مقدار رو به‌عنوان فیلد
-        // اصلی gender/interestedIn می‌فرستیم تا با API فعلی سازگار بمونه.
-        gender: _genders.isNotEmpty ? _genders.first : '',
-        interestedIn: _seeing.isNotEmpty ? _seeing.first : '',
-        bio: _bioController.text.trim(),
-        interests: _interests.toList(),
-        prompts: prompts,
-        genders: _genders.toList(),
-        showGenderOnProfile: _showGenderOnProfile,
-        sexualOrientations: _orientations.toList(),
-        showOrientationOnProfile: _showOrientationOnProfile,
-        interestedInMulti: _seeing.toList(),
-        lookingFor: _lookingFor,
-        educationLevel: _education,
-        school: _schoolController.text.trim(),
-        lifestyle: _lifestyle,
-        aboutYou: _aboutYou,
-      );
-      await ApiClient.saveProfile(input);
-
-      for (final photo in _photos) {
-        final bytes = await photo.readAsBytes();
-        await ApiClient.uploadPhoto(bytes, photo.name);
-      }
-
-      await _requestLocationSilently();
-
-      await AuthSession.setHasProfile(true);
-      if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
-        (route) => false,
-      );
-    } on NetworkException {
-      setState(
-          () => _submitError = 'ارتباط با سرور برقرار نشد. دوباره امتحان کن.');
-    } on ApiException {
-      setState(() =>
-          _submitError = 'یه مشکلی تو اطلاعات واردشده هست. مراحل قبلی رو چک کن.');
-    } finally {
-      if (mounted) setState(() => _submitting = false);
+  /// همه‌ی جواب‌های جمع‌شده رو می‌فرسته، عکس‌ها رو آپلود می‌کنه، موقعیت مکانی
+  /// رو (در صورت اجازه) ثبت می‌کنه، و به HomeScreen می‌ره. خطاها رو عمداً
+  /// catch نمی‌کنه — صفحه‌ی موقعیت مکانی (که این متد رو صدا می‌زنه) خودش
+  /// try/catch داره و پیام خطا رو نشون می‌ده.
+  Future<void> _submitEverything() async {
+    final prompts = <PromptAnswer>[];
+    if (_hasPromptAnswer) {
+      prompts.add(PromptAnswer(
+        promptId: _selectedPromptId!,
+        answer: _promptAnswerController.text.trim(),
+      ));
     }
+
+    final input = ProfileInput(
+      name: _nameController.text.trim(),
+      birthDate:
+          '${_birthDate!.year.toString().padLeft(4, '0')}-${_birthDate!.month.toString().padLeft(2, '0')}-${_birthDate!.day.toString().padLeft(2, '0')}',
+      // اگه بک‌اند هنوز چندانتخابی نداره، اولین مقدار رو به‌عنوان فیلد
+      // اصلی gender/interestedIn می‌فرستیم تا با API فعلی سازگار بمونه.
+      gender: _genders.isNotEmpty ? _genders.first : '',
+      interestedIn: _seeing.isNotEmpty ? _seeing.first : '',
+      bio: _bioController.text.trim(),
+      interests: _interests.toList(),
+      prompts: prompts,
+      genders: _genders.toList(),
+      showGenderOnProfile: _showGenderOnProfile,
+      sexualOrientations: _orientations.toList(),
+      showOrientationOnProfile: _showOrientationOnProfile,
+      interestedInMulti: _seeing.toList(),
+      lookingFor: _lookingFor,
+      educationLevel: _education,
+      school: _schoolController.text.trim(),
+      lifestyle: _lifestyle,
+      aboutYou: _aboutYou,
+    );
+    await ApiClient.saveProfile(input);
+
+    for (final photo in _photos) {
+      final bytes = await photo.readAsBytes();
+      await ApiClient.uploadPhoto(bytes, photo.name);
+    }
+
+    await _requestLocationSilently();
+
+    await AuthSession.setHasProfile(true);
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const HomeScreen()),
+      (route) => false,
+    );
   }
 
   Future<void> _requestLocationSilently() async {
@@ -449,7 +475,7 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
       final pos = await Geolocator.getCurrentPosition();
       await ApiClient.updateLocation(pos.latitude, pos.longitude);
     } catch (_) {
-      // موقعیت اختیاریه؛ اگه نشد، اونبوردینگ رو متوقف نکن.
+      // موقعیت اختیاریه؛ اگه نشد، ثبت‌نام رو متوقف نکن.
     }
   }
 
@@ -516,7 +542,7 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
         children: [
           IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: _submitting ? null : _goBack,
+            onPressed: _goBack,
           ),
           Expanded(
             child: ClipRRect(
@@ -533,7 +559,7 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
             width: 64,
             child: _isSkippable(step)
                 ? TextButton(
-                    onPressed: _submitting ? null : _skip,
+                    onPressed: _skip,
                     child: const Text('رد کردن',
                         style: TextStyle(color: _OB.muted)),
                   )
@@ -547,44 +573,22 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
   Widget _buildBottomBar(_Step step) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_submitError != null) ...[
-            Text(_submitError!,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 13),
-                textAlign: TextAlign.center),
-            const SizedBox(height: 8),
-          ],
-          SizedBox(
-            height: 52,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    _currentValid ? Colors.white : _OB.border,
-                foregroundColor:
-                    _currentValid ? Colors.black : _OB.muted,
-                disabledBackgroundColor: _OB.border,
-                disabledForegroundColor: _OB.muted,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(26)),
-              ),
-              onPressed:
-                  (_currentValid && !_submitting) ? _goNext : null,
-              child: _submitting
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.black54))
-                  : Text(
-                      step == _Step.location ? 'شروع کن' : 'بعدی',
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w700),
-                    ),
-            ),
+      child: SizedBox(
+        height: 52,
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _currentValid ? Colors.white : _OB.border,
+            foregroundColor: _currentValid ? Colors.black : _OB.muted,
+            disabledBackgroundColor: _OB.border,
+            disabledForegroundColor: _OB.muted,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
           ),
-        ],
+          onPressed: _currentValid ? _goNext : null,
+          child: Text(_nextLabel(step),
+              style:
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        ),
       ),
     );
   }
@@ -613,8 +617,6 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
           subtitle: 'عادت‌هاتون بهم می‌خوره؟ اول تو بگو.',
           categories: kLifestyleCategories,
           selections: _lifestyle,
-          counterLabel:
-              'بعدی ${_lifestyle.length}/${kLifestyleCategories.length}',
         );
       case _Step.aboutYou:
         return _stepCategorized(
@@ -622,19 +624,13 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
           subtitle: 'رو نگیر. اصالت جذابیت میاره.',
           categories: kAboutYouCategories,
           selections: _aboutYou,
-          counterLabel:
-              'بعدی ${_aboutYou.length}/${kAboutYouCategories.length}',
         );
       case _Step.interests:
         return _stepInterests();
       case _Step.photos:
         return _stepPhotos();
-      case _Step.bio:
-        return _stepBio();
-      case _Step.prompt:
-        return _stepPrompt();
-      case _Step.location:
-        return _stepLocation();
+      case _Step.bioAndPrompts:
+        return _stepBioAndPrompts();
     }
   }
 
@@ -704,8 +700,8 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
               if (description != null) ...[
                 const SizedBox(height: 4),
                 Text(description,
-                    style:
-                        const TextStyle(color: _OB.muted, fontSize: 12.5, height: 1.4)),
+                    style: const TextStyle(
+                        color: _OB.muted, fontSize: 12.5, height: 1.4)),
               ],
             ],
           ),
@@ -764,6 +760,98 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
     );
   }
 
+  /// ردیف «نمایش بیشتر / نمایش کمتر» زیر هر دسته‌ی علاقه‌مندی — دو خط نازک
+  /// کنار یه متن با فلش، دقیقاً مثل تیندر.
+  Widget _showMoreToggle(String categoryId, bool expanded) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: InkWell(
+        onTap: () => setState(() {
+          if (expanded) {
+            _expandedInterestCats.remove(categoryId);
+          } else {
+            _expandedInterestCats.add(categoryId);
+          }
+        }),
+        child: Row(
+          children: [
+            const Expanded(child: Divider(color: _OB.border, height: 1)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(expanded ? 'نمایش کمتر' : 'نمایش بیشتر',
+                      style: const TextStyle(color: _OB.muted, fontSize: 13)),
+                  Icon(
+                      expanded
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      color: _OB.muted,
+                      size: 18),
+                ],
+              ),
+            ),
+            const Expanded(child: Divider(color: _OB.border, height: 1)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _menuCard({
+    required String title,
+    required String subtitle,
+    required bool filled,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: () {
+        HapticFeedback.lightImpact();
+        onTap();
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _OB.card,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 6),
+                  Text(subtitle,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: _OB.muted, fontSize: 13, height: 1.5)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            CircleAvatar(
+              radius: 14,
+              backgroundColor: Colors.white,
+              child: Icon(filled ? Icons.check : Icons.add,
+                  size: 16, color: Colors.black),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ------------------------- مراحل -------------------------
 
   Widget _stepName() {
@@ -795,22 +883,36 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
       title: 'تولدت کِیه؟',
       subtitle: 'تو پروفایلت فقط سنّت نشون داده می‌شه، نه تاریخ تولدت.',
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            height: 200,
-            child: CupertinoTheme(
-              data: const CupertinoThemeData(brightness: Brightness.dark),
-              child: CupertinoDatePicker(
-                mode: CupertinoDatePickerMode.date,
-                initialDateTime: _birthDate,
-                maximumDate: DateTime.now(),
-                minimumDate: DateTime(1930, 1, 1),
-                onDateTimeChanged: (d) => setState(() => _birthDate = d),
+          // فرمت تاریخ (ماه/روز/سال) همیشه چپ‌به‌راست تایپ می‌شه، حتی تو
+          // اپ راست‌چین — دقیقاً مثل تیندر.
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: TextField(
+              controller: _birthDateInputController,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              inputFormatters: [_DateInputFormatter()],
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1),
+              decoration: const InputDecoration(
+                hintText: 'M M / D D / Y Y Y Y',
+                hintStyle: TextStyle(color: _OB.muted, letterSpacing: 4),
+                border: InputBorder.none,
+                isDense: true,
               ),
+              onChanged: (value) {
+                final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+                setState(() => _birthDate = _parseBirthDigits(digits));
+              },
             ),
           ),
-          if (_age < 18) ...[
-            const SizedBox(height: 8),
+          if (_birthDate != null && _age < 18) ...[
+            const SizedBox(height: 12),
             const Text('باید حداقل ۱۸ سالت باشه.',
                 style: TextStyle(color: Colors.redAccent, fontSize: 13)),
           ],
@@ -871,7 +973,8 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
   Widget _stepSeeing() {
     return _scrollableStep(
       title: 'به دنبال دیدن چه کسایی هستی؟',
-      subtitle: 'هرچی که مدنظرته رو انتخاب کن تا بهترین پیشنهادها رو بهت بدیم.',
+      subtitle:
+          'هرچی که مدنظرته رو انتخاب کن تا بهترین پیشنهادها رو بهت بدیم.',
       child: Column(
         children: kSeeingOptions
             .map((o) => _selectableBox(
@@ -953,6 +1056,7 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
       subtitle: 'یه حس اشتراک، راه ارتباط رو بازتر می‌کنه.',
       child: TextField(
         controller: _schoolController,
+        autofocus: true,
         style: const TextStyle(color: Colors.white, fontSize: 17),
         decoration: const InputDecoration(
           hintText: 'اسم مدرسه یا دانشگاه',
@@ -962,6 +1066,7 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
           focusedBorder: UnderlineInputBorder(
               borderSide: BorderSide(color: _OB.accent, width: 2)),
         ),
+        onChanged: (_) => setState(() {}),
       ),
     );
   }
@@ -971,7 +1076,6 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
     required String subtitle,
     required List<OptionCategory> categories,
     required Map<String, String> selections,
-    required String counterLabel,
   }) {
     return _scrollableStep(
       title: title,
@@ -1020,10 +1124,13 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
       title: 'به چی علاقه داری؟',
       subtitle:
           'تا ۱۰ تا انتخاب کن تا با آدم‌هایی که سلیقه‌ی مشترک دارن راحت‌تر '
-          'وصل بشی. (${_interests.length}/$_maxInterests)',
+          'وصل بشی.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: kInterestCategories.map((cat) {
+          final expanded = _expandedInterestCats.contains(cat.id);
+          final visibleItems =
+              expanded ? cat.items : cat.items.take(kInterestPreviewCount);
           return Padding(
             padding: const EdgeInsets.only(bottom: 22),
             child: Column(
@@ -1038,7 +1145,7 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
                 Wrap(
                   spacing: 10,
                   runSpacing: 10,
-                  children: cat.items.map((item) {
+                  children: visibleItems.map((item) {
                     final selected = _interests.contains(item.id);
                     return _pillChip(
                       label: item.label,
@@ -1053,6 +1160,8 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
                     );
                   }).toList(),
                 ),
+                if (cat.items.length > kInterestPreviewCount)
+                  _showMoreToggle(cat.id, expanded),
               ],
             ),
           );
@@ -1065,8 +1174,8 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
     return _scrollableStep(
       title: 'چندتا عکس اخیرت رو اضافه کن',
       subtitle:
-          'حداقل $_minPhotos عکس آپلود کن تا شروع کنی. هرچی بیشتر باشه، '
-          'پروفایلت بهتر دیده می‌شه.',
+          'حداقل ۲ عکس آپلود کن تا شروع کنی، هرچی بیشتر باشه پروفایلت بهتر '
+          'دیده می‌شه. رو هر عکسی بزنی می‌تونی جاش عوض کنی یا حذفش کنی.',
       child: GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
@@ -1079,30 +1188,21 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
         ),
         itemBuilder: (context, i) {
           if (i < _photos.length) {
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.file(File(_photos[i].path), fit: BoxFit.cover),
-                ),
-                Positioned(
-                  top: 4,
-                  left: 4,
-                  child: GestureDetector(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      setState(() => _photos.removeAt(i));
-                    },
-                    child: const CircleAvatar(
-                      radius: 12,
-                      backgroundColor: Colors.black87,
-                      child:
-                          Icon(Icons.close, size: 14, color: Colors.white),
-                    ),
+            return GestureDetector(
+              onTap: () async {
+                await Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => _PhotoEditScreen(
+                    photos: _photos,
+                    initialIndex: i,
+                    onChanged: () => setState(() {}),
                   ),
-                ),
-              ],
+                ));
+                if (mounted) setState(() {});
+              },
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.file(File(_photos[i].path), fit: BoxFit.cover),
+              ),
             );
           }
           return InkWell(
@@ -1125,165 +1225,689 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
   Future<void> _pickPhoto() async {
     if (_photos.length >= _maxPhotos) return;
     final picker = ImagePicker();
-    final file = await picker.pickImage(
-        source: ImageSource.gallery, imageQuality: 85);
+    final file =
+        await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (file != null) {
       HapticFeedback.lightImpact();
       setState(() => _photos.add(file));
     }
   }
 
-  Widget _stepBio() {
+  Widget _stepBioAndPrompts() {
     return _scrollableStep(
       title: 'بیشتر راجع به خودت بگو',
-      subtitle: 'یه بیوی خوب و کوتاه بنویس تا شروع مکالمه راحت‌تر بشه.',
+      subtitle:
+          'یه بیو بنویس و به یه پرامپت جواب بده تا پروفایلت دیده بشه و '
+          'مکالمه راحت‌تر شروع بشه.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
-            controller: _bioController,
-            style: const TextStyle(color: Colors.white),
-            maxLines: 6,
-            maxLength: _maxBioLength,
-            decoration: const InputDecoration(
-              hintText: 'مثلاً: عاشق کوه و قهوه‌ام، دنبال یکی که...',
-              hintStyle: TextStyle(color: _OB.muted),
-              counterStyle: TextStyle(color: _OB.muted),
-              border: OutlineInputBorder(),
-              enabledBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: _OB.border)),
-              focusedBorder: OutlineInputBorder(
-                  borderSide: BorderSide(color: _OB.accent, width: 2)),
-            ),
-            onChanged: (_) => setState(() {}),
+          _menuCard(
+            title: 'درباره‌ی من',
+            subtitle: _hasBio
+                ? _bioController.text.trim()
+                : 'خودتو معرفی کن تا یه تاثیر خوب بذاری.',
+            filled: _hasBio,
+            onTap: () async {
+              await Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => _AddBioScreen(controller: _bioController),
+              ));
+              setState(() {});
+            },
           ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: _OB.card,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Text(
-              'بیوهای خوب کوتاه و مشخصن. از علاقه‌مندی‌ها، ارزش‌هات و اینکه '
-              'دنبال چی هستی بگو.',
-              style: TextStyle(color: _OB.muted, fontSize: 12.5, height: 1.5),
-            ),
+          const SizedBox(height: 14),
+          _menuCard(
+            title: 'یه پرامپت انتخاب کن',
+            subtitle: _hasPromptAnswer
+                ? '$_selectedPromptText\n${_promptAnswerController.text.trim()}'
+                : 'به یه پرامپت جواب بده تا شخصیتت رو نشون بدی.',
+            filled: _hasPromptAnswer,
+            onTap: _openPromptFlow,
           ),
         ],
       ),
     );
   }
 
-  Widget _stepPrompt() {
+  Future<void> _openPromptFlow() async {
     final prompts = (_serverOptions?.prompts.isNotEmpty ?? false)
-        ? _serverOptions!.prompts
-            .map((p) => OptionItem(p.id, p.text))
-            .toList()
+        ? _serverOptions!.prompts.map((p) => OptionItem(p.id, p.text)).toList()
         : kFallbackPrompts;
 
-    if (_selectedPromptId != null) {
-      return _scrollableStep(
-        title: 'جواب بده',
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(_selectedPromptText ?? '',
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700)),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, color: _OB.muted),
-                  onPressed: () => setState(() {
-                    _selectedPromptId = null;
-                    _selectedPromptText = null;
-                    _promptAnswerController.clear();
-                  }),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _promptAnswerController,
-              autofocus: true,
-              style: const TextStyle(color: Colors.white),
-              maxLines: 3,
-              maxLength: _maxPromptLength,
-              decoration: const InputDecoration(
-                hintText: 'یه‌چیز باحال بنویس...',
-                hintStyle: TextStyle(color: _OB.muted),
-                counterStyle: TextStyle(color: _OB.muted),
-                enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: _OB.border)),
-                focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: _OB.accent, width: 2)),
-              ),
-              onChanged: (_) => setState(() {}),
+    final chosen = await Navigator.of(context).push<OptionItem>(
+      MaterialPageRoute(builder: (_) => _SelectPromptScreen(prompts: prompts)),
+    );
+    if (chosen == null || !mounted) return;
+
+    final answer = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => _AnswerPromptScreen(
+          promptLabel: chosen.label,
+          initialAnswer:
+              _selectedPromptId == chosen.id ? _promptAnswerController.text : '',
+        ),
+      ),
+    );
+    if (answer != null && answer.trim().isNotEmpty) {
+      setState(() {
+        _selectedPromptId = chosen.id;
+        _selectedPromptText = chosen.label;
+        _promptAnswerController.text = answer.trim();
+      });
+    }
+  }
+}
+
+/// فرمت‌کننده‌ی ورودی تاریخ تولد: هرچی کاربر با کیبرد عددی تایپ می‌کنه رو
+/// می‌گیره و خودکار به‌صورت MM/DD/YYYY با «/» جدا می‌کنه (حداکثر ۸ رقم).
+class _DateInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    var digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length > 8) digits = digits.substring(0, 8);
+    final buffer = StringBuffer();
+    for (int i = 0; i < digits.length; i++) {
+      buffer.write(digits[i]);
+      if (i == 1 || i == 3) buffer.write('/');
+    }
+    final text = buffer.toString();
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+}
+
+
+/// صفحه‌ی «اضافه کردن بیو» — از منوی «بیشتر راجع به خودت بگو» باز می‌شه.
+class _AddBioScreen extends StatefulWidget {
+  final TextEditingController controller;
+  const _AddBioScreen({required this.controller});
+
+  @override
+  State<_AddBioScreen> createState() => _AddBioScreenState();
+}
+
+class _AddBioScreenState extends State<_AddBioScreen> {
+  @override
+  Widget build(BuildContext context) {
+    final canSubmit = widget.controller.text.trim().isNotEmpty;
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: _OB.bg,
+        appBar: AppBar(
+          backgroundColor: _OB.bg,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          title: const Text('اضافه کردن بیو',
+              style: TextStyle(color: Colors.white, fontSize: 17)),
+          actions: [
+            TextButton(
+              onPressed: canSubmit ? () => Navigator.of(context).pop() : null,
+              child: Text('تمام',
+                  style: TextStyle(
+                      color: canSubmit ? Colors.white : _OB.muted,
+                      fontWeight: FontWeight.w700)),
             ),
           ],
         ),
-      );
-    }
-
-    return _scrollableStep(
-      title: 'یه پرامپت انتخاب کن',
-      subtitle: 'جواب دادن به یه سؤال کوتاه، مکالمه رو خیلی راحت‌تر شروع می‌کنه.',
-      child: Column(
-        children: prompts
-            .map((p) => InkWell(
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    setState(() {
-                      _selectedPromptId = p.id;
-                      _selectedPromptText = p.label;
-                    });
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 16),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: _OB.border),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Text(p.label,
-                        style: const TextStyle(color: Colors.white, fontSize: 14.5)),
+        body: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: _OB.card,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: TextField(
+                  controller: widget.controller,
+                  autofocus: true,
+                  maxLines: 6,
+                  maxLength: kOnboardingMaxBio,
+                  style: const TextStyle(color: Colors.white, fontSize: 15),
+                  decoration: const InputDecoration(
+                    hintText: 'مثلاً: عاشق کوه و قهوه‌ام، دنبال یکی که...',
+                    hintStyle: TextStyle(color: _OB.muted),
+                    counterStyle: TextStyle(color: _OB.muted),
+                    border: InputBorder.none,
                   ),
-                ))
-            .toList(),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(height: 14),
+              _tipBox(
+                title: 'راهنمای بیو',
+                body:
+                    'بیوهای خوب کوتاه و مشخصن. از علاقه‌مندی‌ها، ارزش‌هات و '
+                    'اینکه دنبال چی هستی بگو.',
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
+}
 
-  Widget _stepLocation() {
-    return _scrollableStep(
-      title: 'اهل همین اطرافی؟',
-      subtitle:
-          'موقعیتت رو فعال کن تا آدم‌های نزدیکت رو ببینی. بدون این، کسی '
-          'باهات مچ نمی‌شه. موقعیت دقیقت هیچ‌وقت با کسی به اشتراک گذاشته نمی‌شه.',
-      child: Column(
-        children: [
-          const SizedBox(height: 20),
-          Container(
-            width: 96,
-            height: 96,
-            decoration: const BoxDecoration(
-                color: Colors.white, shape: BoxShape.circle),
-            child: const Icon(Icons.location_on, color: Colors.black, size: 44),
+Widget _tipBox({required String title, required String body}) {
+  return Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: _OB.card,
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.lightbulb_outline, color: Colors.white, size: 18),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text(body,
+                  style: const TextStyle(
+                      color: _OB.muted, fontSize: 12.5, height: 1.5)),
+            ],
           ),
-          const SizedBox(height: 20),
-          const Text(
-            'با زدن «شروع کن»، پروفایلت ساخته می‌شه و می‌تونی وارد اپ بشی.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: _OB.muted, fontSize: 13, height: 1.6),
+        ),
+      ],
+    ),
+  );
+}
+
+/// صفحه‌ی «یه پرامپت انتخاب کن» — لیست پرامپت‌ها با خط جداکننده‌ی نازک.
+class _SelectPromptScreen extends StatelessWidget {
+  final List<OptionItem> prompts;
+  const _SelectPromptScreen({required this.prompts});
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: _OB.bg,
+        appBar: AppBar(
+          backgroundColor: _OB.bg,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.of(context).pop(),
           ),
-        ],
+          title: const Text('یه پرامپت انتخاب کن',
+              style: TextStyle(color: Colors.white, fontSize: 17)),
+        ),
+        body: ListView.separated(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          itemCount: prompts.length,
+          separatorBuilder: (_, __) => const Divider(color: _OB.border, height: 1),
+          itemBuilder: (context, i) {
+            final p = prompts[i];
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(p.label,
+                  style: const TextStyle(color: Colors.white, fontSize: 15)),
+              onTap: () {
+                HapticFeedback.selectionClick();
+                Navigator.of(context).pop(p);
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// صفحه‌ی «جواب به پرامپت» — پرامپت انتخاب‌شده بالا، باکس نوشتن پایینش.
+class _AnswerPromptScreen extends StatefulWidget {
+  final String promptLabel;
+  final String initialAnswer;
+  const _AnswerPromptScreen(
+      {required this.promptLabel, required this.initialAnswer});
+
+  @override
+  State<_AnswerPromptScreen> createState() => _AnswerPromptScreenState();
+}
+
+class _AnswerPromptScreenState extends State<_AnswerPromptScreen> {
+  late final _controller = TextEditingController(text: widget.initialAnswer);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canSubmit = _controller.text.trim().isNotEmpty;
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: _OB.bg,
+        appBar: AppBar(
+          backgroundColor: _OB.bg,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          title: const Text('جواب به پرامپت',
+              style: TextStyle(color: Colors.white, fontSize: 17)),
+          actions: [
+            TextButton(
+              onPressed: canSubmit
+                  ? () => Navigator.of(context).pop(_controller.text.trim())
+                  : null,
+              child: Text('تمام',
+                  style: TextStyle(
+                      color: canSubmit ? Colors.white : _OB.muted,
+                      fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: _OB.card,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(widget.promptLabel,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600)),
+                      ),
+                      const Icon(Icons.chevron_left, color: _OB.muted),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: _OB.card,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: TextField(
+                  controller: _controller,
+                  autofocus: true,
+                  maxLines: 4,
+                  maxLength: kOnboardingMaxPromptAnswer,
+                  style: const TextStyle(color: Colors.white, fontSize: 15),
+                  decoration: const InputDecoration(
+                    hintText: 'یه‌چیز باحال بنویس...',
+                    hintStyle: TextStyle(color: _OB.muted),
+                    counterStyle: TextStyle(color: _OB.muted),
+                    border: InputBorder.none,
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(height: 14),
+              _tipBox(
+                title: 'راهنمای پرامپت',
+                body:
+                    'پرامپت‌ها شخصیتتو نشون می‌دن. یکی رو انتخاب کن که بهت '
+                    'می‌خوره و به سبک خودت جواب بده.',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// صفحه‌ی ویرایش عکس‌ها — با زدن رو یه عکس تو گرید باز می‌شه: پیش‌نمایش
+/// بزرگ، ردیف تامبنیل با ضربدر حذف، و دکمه‌ی «جایگزین کردن».
+class _PhotoEditScreen extends StatefulWidget {
+  final List<XFile> photos; // رفرنس مستقیم به لیست state اصلی
+  final int initialIndex;
+  final VoidCallback onChanged;
+  const _PhotoEditScreen({
+    required this.photos,
+    required this.initialIndex,
+    required this.onChanged,
+  });
+
+  @override
+  State<_PhotoEditScreen> createState() => _PhotoEditScreenState();
+}
+
+class _PhotoEditScreenState extends State<_PhotoEditScreen> {
+  late int _activeIndex = widget.initialIndex;
+
+  Future<void> _replace() async {
+    final picker = ImagePicker();
+    final file =
+        await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (file == null) return;
+    setState(() => widget.photos[_activeIndex] = file);
+    widget.onChanged();
+  }
+
+  void _removePhoto(int index) {
+    setState(() {
+      widget.photos.removeAt(index);
+      if (_activeIndex >= widget.photos.length) {
+        _activeIndex = widget.photos.length - 1;
+      }
+      if (_activeIndex < 0) _activeIndex = 0;
+    });
+    widget.onChanged();
+    if (widget.photos.isEmpty) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.photos.isEmpty) return const SizedBox.shrink();
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: _OB.bg,
+        appBar: AppBar(
+          backgroundColor: _OB.bg,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          title: const Text('ویرایش عکس‌ها',
+              style: TextStyle(color: Colors.white, fontSize: 17)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('تمام',
+                  style:
+                      TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.file(
+                    File(widget.photos[_activeIndex].path),
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(
+              height: 88,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: widget.photos.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 10),
+                itemBuilder: (context, i) {
+                  final selected = i == _activeIndex;
+                  return GestureDetector(
+                    onTap: () => setState(() => _activeIndex = i),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          width: 64,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color:
+                                    selected ? Colors.white : Colors.transparent,
+                                width: 2),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.file(File(widget.photos[i].path),
+                                fit: BoxFit.cover),
+                          ),
+                        ),
+                        Positioned(
+                          top: -6,
+                          right: -6,
+                          child: GestureDetector(
+                            onTap: () => _removePhoto(i),
+                            child: const CircleAvatar(
+                              radius: 10,
+                              backgroundColor: Colors.black87,
+                              child:
+                                  Icon(Icons.close, size: 12, color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.white),
+                    shape:
+                        RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                  ),
+                  onPressed: _replace,
+                  child: const Text('جایگزین کردن',
+                      style:
+                          TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// صفحه‌ی موقعیت مکانی — سبک "system permission" تیندر: بدون نوار پیشرفت
+/// یا فلش برگشت، فقط آیکون/متن/دکمه‌ی «اجازه بده»، و یه بخش قابل‌بازشدن
+/// «موقعیت من چطور استفاده می‌شه؟» که با زدنش توضیح «نگران نباش» میاد بالا.
+class _LocationPermissionScreen extends StatefulWidget {
+  final Future<void> Function() onAllow;
+  const _LocationPermissionScreen({required this.onAllow});
+
+  @override
+  State<_LocationPermissionScreen> createState() =>
+      _LocationPermissionScreenState();
+}
+
+class _LocationPermissionScreenState extends State<_LocationPermissionScreen> {
+  bool _infoExpanded = false;
+  bool _loading = false;
+  String? _error;
+
+  Future<void> _handleAllow() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await widget.onAllow();
+      // موفقیت‌آمیز بود: onAllow خودش کاربر رو به HomeScreen می‌بره.
+    } on NetworkException {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'ارتباط با سرور برقرار نشد. دوباره امتحان کن.';
+        });
+      }
+    } on ApiException {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'یه مشکلی تو اطلاعات واردشده هست. مراحل قبلی رو چک کن.';
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'یه مشکلی پیش اومد. دوباره امتحان کن.';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: PopScope(
+        canPop: !_loading,
+        child: Scaffold(
+          backgroundColor: _OB.bg,
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
+              child: Column(
+                children: [
+                  if (_infoExpanded)
+                    Align(
+                      alignment: Alignment.topCenter,
+                      child: IconButton(
+                        icon: const Icon(Icons.arrow_upward, color: Colors.white),
+                        onPressed: () => setState(() => _infoExpanded = false),
+                      ),
+                    ),
+                  if (!_infoExpanded) ...[
+                    const Spacer(),
+                    const Text('اهل همین اطرافی؟',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'موقعیتت رو فعال کن تا آدم‌های همین اطراف یا کمی دورتر '
+                      'رو ببینی. بدون این، کسی باهات مچ نمی‌شه.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: _OB.muted, fontSize: 14, height: 1.6),
+                    ),
+                    const SizedBox(height: 36),
+                    Container(
+                      width: 120,
+                      height: 120,
+                      decoration:
+                          const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                      child: const Icon(Icons.location_on_outlined,
+                          color: Colors.black87, size: 52),
+                    ),
+                    const Spacer(),
+                  ] else
+                    const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(26)),
+                      ),
+                      onPressed: _loading ? null : _handleAllow,
+                      child: _loading
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.black54))
+                          : const Text('اجازه بده',
+                              style: TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 10),
+                    Text(_error!,
+                        style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
+                  ],
+                  const SizedBox(height: 16),
+                  if (!_infoExpanded)
+                    InkWell(
+                      onTap: () => setState(() => _infoExpanded = true),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Text('موقعیت من چطور استفاده می‌شه؟',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14)),
+                          SizedBox(width: 6),
+                          Icon(Icons.keyboard_arrow_down,
+                              color: Colors.white, size: 20),
+                        ],
+                      ),
+                    )
+                  else ...[
+                    const SizedBox(height: 20),
+                    const Text('نگران نباش—',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'موقعیتت کمک می‌کنه افرادی که نزدیکت یا کمی دورترن رو '
+                      'بهت پیشنهاد بدیم. موقعیت دقیقت هیچ‌وقت به اشتراک '
+                      'گذاشته نمی‌شه.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: _OB.muted, fontSize: 14, height: 1.6),
+                    ),
+                    const Spacer(),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

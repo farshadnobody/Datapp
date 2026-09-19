@@ -19,6 +19,13 @@ class OptionCategory {
   const OptionCategory(this.id, this.title, this.items);
 }
 
+// تو مرحله‌ی «به چی علاقه داری»، هر دسته اول فقط همین تعداد تگ اول رو نشون
+// می‌ده و بقیه پشت دکمه‌ی «نمایش بیشتر» قایم می‌شن (دقیقاً رفتار تیندر).
+// برای اضافه کردن تگ‌های بیشتر (هم برای حالت جمع‌شده، هم برای حالت باز)،
+// کافیه به لیست items همون دسته‌ی موردنظر تو kInterestCategories زیر
+// OptionItem جدید اضافه کنی — پنج‌تای اول خودکار می‌شن حالت جمع‌شده.
+const int kInterestPreviewCount = 5;
+
 // مرحله‌ی جنسیت
 const List<OptionItem> kGenderOptions = [
   OptionItem('man', 'مرد'),
