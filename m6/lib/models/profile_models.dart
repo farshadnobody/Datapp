@@ -225,6 +225,13 @@ class MyProfile {
       );
 }
 
+Map<String, String> _stringMap(dynamic v) {
+  if (v is Map) {
+    return v.map((k, val) => MapEntry(k.toString(), val.toString()));
+  }
+  return const {};
+}
+
 class DiscoveryCandidate {
   final String publicId;
   final String name;
@@ -236,6 +243,15 @@ class DiscoveryCandidate {
   final double? distanceKm;
   final String? previousDirection; // null یعنی هیچ‌وقت swipe نشده
 
+  // --- فیلدهای اختیاریِ کارت سبک تیندر ---
+  // اگه بک‌اند (Go) این‌ها رو تو JSON بفرسته، روی کارت نشون داده می‌شن؛
+  // اگه نفرسته، فقط همون بخش از کارت نمایش داده نمی‌شه (اپ خراب نمی‌شه).
+  final String? lookingFor; // مثلاً "long_term"
+  final String? educationLevel;
+  final Map<String, String> lifestyle; // {"drinking": "sober", ...}
+  final Map<String, String> aboutYou; // {"communication": "phone_caller", ...}
+  final String? activityStatus; // 'active' | 'recent' | 'new' | null
+
   DiscoveryCandidate({
     required this.publicId,
     required this.name,
@@ -246,6 +262,11 @@ class DiscoveryCandidate {
     required this.photos,
     required this.distanceKm,
     this.previousDirection,
+    this.lookingFor,
+    this.educationLevel,
+    this.lifestyle = const {},
+    this.aboutYou = const {},
+    this.activityStatus,
   });
 
   factory DiscoveryCandidate.fromJson(Map<String, dynamic> json) =>
@@ -265,5 +286,31 @@ class DiscoveryCandidate {
             ? null
             : (json['distance_km'] as num).toDouble(),
         previousDirection: json['previous_direction'],
+        lookingFor: json['looking_for'] as String?,
+        educationLevel: json['education_level'] as String?,
+        lifestyle: _stringMap(json['lifestyle']),
+        aboutYou: _stringMap(json['about_you']),
+        activityStatus: _activityFrom(json),
       );
+
+  // اگه بک‌اند مستقیم `activity_status` بفرسته همون رو می‌گیریم؛ وگرنه از
+  // `created_at` و `last_active_at` (ISO 8601) حسابش می‌کنیم.
+  static String? _activityFrom(Map<String, dynamic> json) {
+    final explicit = json['activity_status'];
+    if (explicit is String && explicit.isNotEmpty) return explicit;
+
+    final created = DateTime.tryParse('${json['created_at'] ?? ''}');
+    final active = DateTime.tryParse('${json['last_active_at'] ?? ''}');
+    final now = DateTime.now().toUtc();
+
+    if (created != null && now.difference(created.toUtc()).inDays < 7) {
+      return 'new';
+    }
+    if (active != null) {
+      final diff = now.difference(active.toUtc());
+      if (diff.inMinutes < 5) return 'active';
+      if (diff.inHours < 24) return 'recent';
+    }
+    return null;
+  }
 }

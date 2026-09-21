@@ -9,6 +9,7 @@ import '../auth_session.dart';
 import '../models/profile_models.dart';
 import '../onboarding/onboarding_data.dart';
 import 'auth_ui.dart'; // AuthColors, kAppName
+import '../swipe/swipe_onboarding_store.dart';
 import 'home_screen.dart';
 
 /// حداکثر طول بیو و جواب پرامپت — تو صفحه‌های «اضافه کردن بیو» و «جواب به
@@ -455,6 +456,9 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
     await _requestLocationSilently();
 
     await AuthSession.setHasProfile(true);
+    // کاربر تازه‌ثبت‌نام‌شده: صفحه‌ی Swipe تا ۲۰ لایک/رد اول تو «حالت یادگیری
+    // سلیقه» می‌مونه (بنر بالا + فقط دکمه‌ی ضربدر و قلب).
+    await SwipeOnboarding.start();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const HomeScreen()),

@@ -39,8 +39,11 @@ class _ConnectionStatusBannerState extends State<ConnectionStatusBanner> {
 
   @override
   Widget build(BuildContext context) {
-    // تا اولین چک انجام نشده، چیزی نشون نده تا صفحه چشمک نزنه.
-    if (_connected == null) {
+    // تا اولین چک انجام نشده، چیزی نشون نده تا صفحه چشمک نزنه. وقتی هم که
+    // اتصال برقراره چیزی نشون نمی‌دیم (نوار سبز بالای صفحه‌ی Swipe با ظاهر
+    // تیندر جور نبود)؛ فقط وقتی قطع بشه نوار قرمز میاد. اگه نوار سبز رو تو
+    // دیباگ می‌خوای، شرط رو به `_connected == null` برگردون.
+    if (_connected == null || _connected == true) {
       return const SizedBox.shrink();
     }
 

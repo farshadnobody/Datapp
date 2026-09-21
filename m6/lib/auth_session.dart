@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'swipe/swipe_onboarding_store.dart';
 
 // نگهدارنده‌ی session. مقدارها هم تو حافظه نگه داشته می‌شن (برای دسترسی
 // سریع و همزمان از ApiClient) و هم با shared_preferences روی گوشی ذخیره
@@ -57,6 +58,8 @@ class AuthSession {
     token = null;
     phone = null;
     hasProfile = false;
+    // شمارنده‌ی مرحله‌ی یادگیری سلیقه مال همین کاربر بود.
+    await SwipeOnboarding.clear();
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_tokenKey);

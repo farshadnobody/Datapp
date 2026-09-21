@@ -8,6 +8,7 @@ import 'screens/onboarding_flow.dart';
 import 'widgets/connection_status_banner.dart';
 import 'network_config.dart';
 import 'push_notifications.dart';
+import 'swipe/swipe_onboarding_store.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -20,6 +21,9 @@ void main() async {
   // توکن ذخیره‌شده‌ی لاگین قبلی رو از روی گوشی می‌خونیم تا کاربر هر بار که
   // اپ رو باز می‌کنه مجبور به لاگین دوباره نشه.
   await AuthSession.load();
+
+  // شمارنده‌ی «۲۰ نفر اول» (مرحله‌ی یادگیری سلیقه تو صفحه‌ی Swipe).
+  await SwipeOnboarding.load();
 
   // اگه سرور توکن رو رد کرد (مثلاً منقضی شده)، کاربر رو برمی‌گردونیم به شروع.
   AuthSession.onExpired = () {
