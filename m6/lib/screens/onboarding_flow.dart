@@ -536,36 +536,57 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
   }
 
   Widget _buildHeader(_Step step, double progress) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 4, 16, 8),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: _goBack,
-          ),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(3),
+    final skippable = _isSkippable(step);
+
+    // این هدر همیشه از چپ به راست چیده می‌شه (فلش برگشت سمت چپ و رو به چپ،
+    // دکمه‌ی رد کردن سمت راست، نوار پیشرفت هم از چپ به راست پر می‌شه) —
+    // دقیقاً مثل تیندر، حتی وقتی بقیه‌ی اپ راست‌چینه.
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          children: [
+            // نوار پیشرفت
+            ClipRRect(
+              borderRadius: BorderRadius.circular(2),
               child: LinearProgressIndicator(
                 value: progress,
-                minHeight: 4,
                 backgroundColor: _OB.border,
-                valueColor: const AlwaysStoppedAnimation(_OB.accent),
+                color: _OB.accent,
+                minHeight: 4,
               ),
             ),
-          ),
-          SizedBox(
-            width: 64,
-            child: _isSkippable(step)
-                ? TextButton(
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.arrow_back,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                  onPressed: _goBack,
+                ),
+                if (skippable)
+                  TextButton(
                     onPressed: _skip,
-                    child: const Text('رد کردن',
-                        style: TextStyle(color: _OB.muted)),
+                    child: const Text(
+                      'رد کردن',
+                      style: TextStyle(
+                        color: _OB.muted,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   )
-                : const SizedBox.shrink(),
-          ),
-        ],
+                else
+                  const SizedBox(width: 48),
+              ],
+            ),
+          ],
+        ), // بستن Padding
       ),
     );
   }
@@ -574,6 +595,7 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
       child: SizedBox(
+        width: double.infinity,
         height: 52,
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(
@@ -800,58 +822,80 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
   }
 
   Widget _menuCard({
-    required String title,
-    required String subtitle,
-    required bool filled,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onTap();
-      },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: _OB.card,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
+      required String title,
+      required String subtitle,
+      required bool filled,
+      required VoidCallback onTap,
+    }) {
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () {
+              HapticFeedback.lightImpact();
+              onTap();
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: _OB.card,
+                borderRadius: BorderRadius.circular(14),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                   const SizedBox(height: 6),
-                  Text(subtitle,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          color: _OB.muted, fontSize: 13, height: 1.5)),
+                  Text(
+                    subtitle,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _OB.muted,
+                      fontSize: 13,
+                      height: 1.5,
+                    ),
+                  ),
                 ],
               ),
             ),
-            const SizedBox(width: 12),
-            CircleAvatar(
-              radius: 14,
-              backgroundColor: Colors.white,
-              child: Icon(filled ? Icons.check : Icons.add,
-                  size: 16, color: Colors.black),
+          ),
+          Positioned(
+            top: -8,
+            right: -8,
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black38,
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Icon(
+                filled ? Icons.check : Icons.add,
+                size: 20,
+                color: Colors.black,
+              ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
+          ),
+        ],
+      );
+    }
   // ------------------------- مراحل -------------------------
 
   Widget _stepName() {
@@ -879,71 +923,56 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
   }
 
   Widget _stepBirthday() {
-    return _scrollableStep(
-      title: 'تولدت کِیه؟',
-      subtitle: 'تو پروفایلت فقط سنّت نشون داده می‌شه، نه تاریخ تولدت.',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // فرمت تاریخ (ماه/روز/سال) همیشه چپ‌به‌راست تایپ می‌شه، حتی تو
-          // اپ راست‌چین — دقیقاً مثل تیندر.
-          Directionality(
-            textDirection: TextDirection.ltr,
-            child: TextField(
+      return _scrollableStep(
+        title: 'تولدت کِیه؟',
+        subtitle: 'تو پروفایلت فقط سنّت نشون داده می‌شه، نه تاریخ تولدت.',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _TinderDateInputField(
               controller: _birthDateInputController,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              inputFormatters: [_DateInputFormatter()],
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 26,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1),
-              decoration: const InputDecoration(
-                hintText: 'M M / D D / Y Y Y Y',
-                hintStyle: TextStyle(color: _OB.muted, letterSpacing: 4),
-                border: InputBorder.none,
-                isDense: true,
-              ),
-              onChanged: (value) {
-                final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
+              onChanged: (digits) {
                 setState(() => _birthDate = _parseBirthDigits(digits));
               },
             ),
-          ),
-          if (_birthDate != null && _age < 18) ...[
-            const SizedBox(height: 12),
-            const Text('باید حداقل ۱۸ سالت باشه.',
-                style: TextStyle(color: Colors.redAccent, fontSize: 13)),
+            if (_birthDate != null && _age < 18) ...[
+              const SizedBox(height: 12),
+              const Text(
+                'باید حداقل ۱۸ سالت باشه.',
+                style: TextStyle(color: Colors.redAccent, fontSize: 13),
+              ),
+            ],
           ],
-        ],
-      ),
-    );
-  }
+        ),
+      );
+    }
 
   Widget _stepGender() {
-    return _scrollableStep(
-      title: 'جنسیتت چیه؟',
-      subtitle:
-          'هرچی که با هویتت جور در میاد رو انتخاب کن. می‌تونی چندتا بزنی.',
-      child: Column(
-        children: [
-          ...kGenderOptions.map((o) => _selectableBox(
-                label: o.label,
-                selected: _genders.contains(o.id),
-                onTap: () => setState(() {
-                  _genders.contains(o.id)
-                      ? _genders.remove(o.id)
-                      : _genders.add(o.id);
-                }),
-              )),
-          const SizedBox(height: 8),
-          _checkboxRow('جنسیتم تو پروفایل نشون داده بشه', _showGenderOnProfile,
-              (v) => setState(() => _showGenderOnProfile = v)),
-        ],
-      ),
-    );
-  }
+      return _scrollableStep(
+        title: 'جنسیتت چیه؟',
+        subtitle:
+            'جنسیتت رو انتخاب کن.',
+        child: Column(
+          children: [
+            ...kGenderOptions.map((o) => _selectableBox(
+                  label: o.label,
+                  selected: _genders.contains(o.id),
+                  onTap: () => setState(() {
+                    if (_genders.contains(o.id)) {
+                      _genders.clear();
+                    } else {
+                      _genders.clear();
+                      _genders.add(o.id);
+                    }
+                  }),
+                )),
+            const SizedBox(height: 8),
+            _checkboxRow('جنسیتم تو پروفایل نشون داده بشه', _showGenderOnProfile,
+                (v) => setState(() => _showGenderOnProfile = v)),
+          ],
+        ),
+      );
+    }
 
   Widget _stepOrientation() {
     return _scrollableStep(
@@ -971,25 +1000,44 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
   }
 
   Widget _stepSeeing() {
-    return _scrollableStep(
-      title: 'به دنبال دیدن چه کسایی هستی؟',
-      subtitle:
-          'هرچی که مدنظرته رو انتخاب کن تا بهترین پیشنهادها رو بهت بدیم.',
-      child: Column(
-        children: kSeeingOptions
-            .map((o) => _selectableBox(
-                  label: o.label,
-                  selected: _seeing.contains(o.id),
-                  onTap: () => setState(() {
-                    _seeing.contains(o.id)
-                        ? _seeing.remove(o.id)
-                        : _seeing.add(o.id);
-                  }),
-                ))
-            .toList(),
-      ),
-    );
-  }
+      // فرض بر این است که شناسه گزینه «همه» برابر 'everyone' یا دیتای مشابه در kSeeingOptions است.
+      // در صورت متفاوت بودن ID، مقدار everyoneId را متناسب با مدل خود تغییر دهید.
+      const String everyoneId = 'everyone'; 
+
+      return _scrollableStep(
+        title: 'به دنبال دیدن چه کسایی هستی؟',
+        subtitle:
+            'هرچی که مدنظرته رو انتخاب کن تا بهترین پیشنهادها رو بهت بدیم.',
+        child: Column(
+          children: kSeeingOptions
+              .map((o) => _selectableBox(
+                    label: o.label,
+                    selected: _seeing.contains(o.id),
+                    onTap: () => setState(() {
+                      if (o.id == everyoneId) {
+                        // اگر «همه» انتخاب شد: تمام گزینه‌های قبلی پاک شده و فقط «همه» قرار می‌گیرد
+                        _seeing.clear();
+                        _seeing.add(everyoneId);
+                      } else {
+                        // اگر گزینه دیگری انتخاب شد: ابتدا «همه» حذف می‌شود
+                        _seeing.remove(everyoneId);
+
+                        if (_seeing.contains(o.id)) {
+                          // اگر قبلاً انتخاب شده بود، آن را حذف کن
+                          _seeing.remove(o.id);
+                        } else {
+                          // حداکثر ۲ گزینه از گزینه‌های غیر از «همه» قابل انتخاب است
+                          if (_seeing.length < 2) {
+                            _seeing.add(o.id);
+                          }
+                        }
+                      }
+                    }),
+                  ))
+              .toList(),
+        ),
+      );
+    }
 
   Widget _stepLookingFor() {
     return _scrollableStep(
@@ -1171,56 +1219,86 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
   }
 
   Widget _stepPhotos() {
-    return _scrollableStep(
-      title: 'چندتا عکس اخیرت رو اضافه کن',
-      subtitle:
-          'حداقل ۲ عکس آپلود کن تا شروع کنی، هرچی بیشتر باشه پروفایلت بهتر '
-          'دیده می‌شه. رو هر عکسی بزنی می‌تونی جاش عوض کنی یا حذفش کنی.',
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: _maxPhotos,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          childAspectRatio: 0.72,
-        ),
-        itemBuilder: (context, i) {
-          if (i < _photos.length) {
-            return GestureDetector(
-              onTap: () async {
-                await Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => _PhotoEditScreen(
-                    photos: _photos,
-                    initialIndex: i,
-                    onChanged: () => setState(() {}),
+      return _scrollableStep(
+        title: 'چندتا عکس اخیرت رو اضافه کن',
+        subtitle:
+            'حداقل ۲ عکس آپلود کن تا شروع کنی، هرچی بیشتر باشه پروفایلت بهتر '
+            'دیده می‌شه. رو هر عکسی بزنی می‌تونی جاش عوض کنی یا حذفش کنی.',
+        child: GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _maxPhotos,
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 0.72,
+          ),
+          itemBuilder: (context, i) {
+            if (i < _photos.length) {
+              return GestureDetector(
+                onTap: () async {
+                  await Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => _PhotoEditScreen(
+                      photos: _photos,
+                      initialIndex: i,
+                      onChanged: () => setState(() {}),
+                    ),
+                  ));
+                  if (mounted) setState(() {});
+                },
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.file(File(_photos[i].path), fit: BoxFit.cover),
+                ),
+              );
+            }
+            return InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: _pickPhoto,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // کارت مشکی پس‌زمینه
+                  Container(
+                    decoration: BoxDecoration(
+                      color: _OB.card,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _OB.border),
+                    ),
                   ),
-                ));
-                if (mounted) setState(() {});
-              },
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.file(File(_photos[i].path), fit: BoxFit.cover),
+                  // دکمه دایره‌ای سفید حاوی آیکون + در گوشه کادر
+                  Positioned(
+                    top: -6,
+                    right: -6,
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black26,
+                            blurRadius: 4,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.add,
+                        color: Colors.black,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             );
-          }
-          return InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: _pickPhoto,
-            child: Container(
-              decoration: BoxDecoration(
-                color: _OB.card,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _OB.border),
-              ),
-              child: const Icon(Icons.add, color: Colors.white70),
-            ),
-          );
-        },
-      ),
-    );
-  }
+          },
+        ),
+      );
+    }
 
   Future<void> _pickPhoto() async {
     if (_photos.length >= _maxPhotos) return;
@@ -1269,7 +1347,7 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
     );
   }
 
-  Future<void> _openPromptFlow() async {
+Future<void> _openPromptFlow() async {
     final prompts = (_serverOptions?.prompts.isNotEmpty ?? false)
         ? _serverOptions!.prompts.map((p) => OptionItem(p.id, p.text)).toList()
         : kFallbackPrompts;
@@ -1279,20 +1357,22 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
     );
     if (chosen == null || !mounted) return;
 
-    final answer = await Navigator.of(context).push<String>(
+    final result = await Navigator.of(context).push<Map<String, String>>(
       MaterialPageRoute(
         builder: (_) => _AnswerPromptScreen(
           promptLabel: chosen.label,
           initialAnswer:
               _selectedPromptId == chosen.id ? _promptAnswerController.text : '',
+          prompts: prompts,
         ),
       ),
     );
-    if (answer != null && answer.trim().isNotEmpty) {
+    
+    if (result != null && (result['answer']?.isNotEmpty ?? false)) {
       setState(() {
         _selectedPromptId = chosen.id;
-        _selectedPromptText = chosen.label;
-        _promptAnswerController.text = answer.trim();
+        _selectedPromptText = result['label'];
+        _promptAnswerController.text = result['answer']!;
       });
     }
   }
@@ -1301,20 +1381,54 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen> {
 /// فرمت‌کننده‌ی ورودی تاریخ تولد: هرچی کاربر با کیبرد عددی تایپ می‌کنه رو
 /// می‌گیره و خودکار به‌صورت MM/DD/YYYY با «/» جدا می‌کنه (حداکثر ۸ رقم).
 class _DateInputFormatter extends TextInputFormatter {
+  static const String _mask = 'MM/DD/YYYY';
+
   @override
   TextEditingValue formatEditUpdate(
       TextEditingValue oldValue, TextEditingValue newValue) {
+    // فقط اعداد وارد شده را استخراج می‌کنیم
     var digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
     if (digits.length > 8) digits = digits.substring(0, 8);
+
     final buffer = StringBuffer();
-    for (int i = 0; i < digits.length; i++) {
-      buffer.write(digits[i]);
-      if (i == 1 || i == 3) buffer.write('/');
+    int digitIndex = 0;
+
+    for (int i = 0; i < _mask.length; i++) {
+      if (_mask[i] == '/') {
+        buffer.write('/');
+      } else {
+        if (digitIndex < digits.length) {
+          buffer.write(digits[digitIndex]);
+          digitIndex++;
+        } else {
+          buffer.write(_mask[i]);
+        }
+      }
     }
-    final text = buffer.toString();
+
+    final formattedText = buffer.toString();
+
+    // محاسبه موقعیت دقیق کورسر (مکان‌نما) تا بعد از اسلش‌ها یا حروف باقی‌مانده قرار نگیرد
+    int cursorPosition = 0;
+    int tempDigits = digits.length;
+    for (int i = 0; i < formattedText.length; i++) {
+      if (tempDigits > 0) {
+        if (formattedText[i] != '/') {
+          tempDigits--;
+        }
+        cursorPosition = i + 1;
+      }
+    }
+
+    // اگر اولین اسلش بلافاصله بعد از اعداد بود، کورسر را بعد از اسلش می‌بریم
+    if (cursorPosition < formattedText.length &&
+        formattedText[cursorPosition] == '/') {
+      cursorPosition++;
+    }
+
     return TextEditingValue(
-      text: text,
-      selection: TextSelection.collapsed(offset: text.length),
+      text: formattedText,
+      selection: TextSelection.collapsed(offset: cursorPosition),
     );
   }
 }
@@ -1333,30 +1447,55 @@ class _AddBioScreenState extends State<_AddBioScreen> {
   @override
   Widget build(BuildContext context) {
     final canSubmit = widget.controller.text.trim().isNotEmpty;
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: _OB.bg,
-        appBar: AppBar(
-          backgroundColor: _OB.bg,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          title: const Text('اضافه کردن بیو',
-              style: TextStyle(color: Colors.white, fontSize: 17)),
-          actions: [
-            TextButton(
-              onPressed: canSubmit ? () => Navigator.of(context).pop() : null,
-              child: Text('تمام',
-                  style: TextStyle(
-                      color: canSubmit ? Colors.white : _OB.muted,
-                      fontWeight: FontWeight.w700)),
+
+    return Scaffold(
+      backgroundColor: _OB.bg,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: AppBar(
+            backgroundColor: _OB.bg,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
             ),
-          ],
+            titleSpacing: 0,
+            title: const Text(
+              'اضافه کردن بیو',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 16, top: 10, bottom: 10),
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: canSubmit ? Colors.white : const Color(0xFF2C2C2E),
+                    foregroundColor: canSubmit ? Colors.black : const Color(0xFF636366),
+                    disabledBackgroundColor: const Color(0xFF2C2C2E),
+                    disabledForegroundColor: const Color(0xFF636366),
+                    shape: const StadiumBorder(),
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                  ),
+                  onPressed: canSubmit ? () => Navigator.of(context).pop() : null,
+                  child: const Text(
+                    'تمام',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-        body: Padding(
+      ),
+      body: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1437,21 +1576,34 @@ class _SelectPromptScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: _OB.bg,
-        appBar: AppBar(
-          backgroundColor: _OB.bg,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Navigator.of(context).pop(),
+    return Scaffold(
+      backgroundColor: _OB.bg,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: AppBar(
+            backgroundColor: _OB.bg,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            titleSpacing: 0,
+            title: const Text(
+              'یه پرامپت انتخاب کن',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
-          title: const Text('یه پرامپت انتخاب کن',
-              style: TextStyle(color: Colors.white, fontSize: 17)),
         ),
-        body: ListView.separated(
+      ),
+      body: Directionality(
+        textDirection: TextDirection.rtl,
+        child: ListView.separated(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           itemCount: prompts.length,
           separatorBuilder: (_, __) => const Divider(color: _OB.border, height: 1),
@@ -1477,8 +1629,13 @@ class _SelectPromptScreen extends StatelessWidget {
 class _AnswerPromptScreen extends StatefulWidget {
   final String promptLabel;
   final String initialAnswer;
-  const _AnswerPromptScreen(
-      {required this.promptLabel, required this.initialAnswer});
+  final List<OptionItem> prompts;
+
+  const _AnswerPromptScreen({
+    required this.promptLabel,
+    required this.initialAnswer,
+    required this.prompts,
+  });
 
   @override
   State<_AnswerPromptScreen> createState() => _AnswerPromptScreenState();
@@ -1486,6 +1643,7 @@ class _AnswerPromptScreen extends StatefulWidget {
 
 class _AnswerPromptScreenState extends State<_AnswerPromptScreen> {
   late final _controller = TextEditingController(text: widget.initialAnswer);
+  late String _currentPromptLabel = widget.promptLabel;
 
   @override
   void dispose() {
@@ -1493,45 +1651,91 @@ class _AnswerPromptScreenState extends State<_AnswerPromptScreen> {
     super.dispose();
   }
 
+  Future<void> _changePrompt() async {
+    final chosen = await Navigator.of(context).push<OptionItem>(
+      MaterialPageRoute(
+        builder: (_) => _SelectPromptScreen(prompts: widget.prompts),
+      ),
+    );
+    if (chosen != null && mounted) {
+      setState(() {
+        _currentPromptLabel = chosen.label;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final canSubmit = _controller.text.trim().isNotEmpty;
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: _OB.bg,
-        appBar: AppBar(
-          backgroundColor: _OB.bg,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          title: const Text('جواب به پرامپت',
-              style: TextStyle(color: Colors.white, fontSize: 17)),
-          actions: [
-            TextButton(
-              onPressed: canSubmit
-                  ? () => Navigator.of(context).pop(_controller.text.trim())
-                  : null,
-              child: Text('تمام',
-                  style: TextStyle(
-                      color: canSubmit ? Colors.white : _OB.muted,
-                      fontWeight: FontWeight.w700)),
+
+    return Scaffold(
+      backgroundColor: _OB.bg,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: AppBar(
+            backgroundColor: _OB.bg,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
             ),
-          ],
+            titleSpacing: 0,
+            title: const Text(
+              'جواب به پرامپت',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 16, top: 10, bottom: 10),
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor:
+                        canSubmit ? Colors.white : const Color(0xFF2C2C2E),
+                    foregroundColor:
+                        canSubmit ? Colors.black : const Color(0xFF636366),
+                    disabledBackgroundColor: const Color(0xFF2C2C2E),
+                    disabledForegroundColor: const Color(0xFF636366),
+                    shape: const StadiumBorder(),
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                  ),
+                  onPressed: canSubmit
+                      ? () => Navigator.of(context).pop({
+                            'label': _currentPromptLabel,
+                            'answer': _controller.text.trim(),
+                          })
+                      : null,
+                  child: const Text(
+                    'تمام',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-        body: Padding(
+      ),
+      body: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // با کلیک روی این بخش، صفحه انتخاب پرامپت باز می‌شود
               InkWell(
                 borderRadius: BorderRadius.circular(14),
-                onTap: () => Navigator.of(context).pop(),
+                onTap: _changePrompt,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
                     color: _OB.card,
                     borderRadius: BorderRadius.circular(14),
@@ -1539,11 +1743,14 @@ class _AnswerPromptScreenState extends State<_AnswerPromptScreen> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: Text(widget.promptLabel,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600)),
+                        child: Text(
+                          _currentPromptLabel,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                       const Icon(Icons.chevron_left, color: _OB.muted),
                     ],
@@ -1586,6 +1793,7 @@ class _AnswerPromptScreenState extends State<_AnswerPromptScreen> {
     );
   }
 }
+
 
 /// صفحه‌ی ویرایش عکس‌ها — با زدن رو یه عکس تو گرید باز می‌شه: پیش‌نمایش
 /// بزرگ، ردیف تامبنیل با ضربدر حذف، و دکمه‌ی «جایگزین کردن».
@@ -1907,6 +2115,115 @@ class _LocationPermissionScreenState extends State<_LocationPermissionScreen> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+
+class _TinderDateInputField extends StatelessWidget {
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  const _TinderDateInputField({
+    required this.controller,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // نمایش گرافیکی ماسک (استایل، فاصله‌ها و رنگ‌ها)
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: controller,
+          builder: (context, value, _) {
+            final digits = value.text.replaceAll(RegExp(r'[^0-9]'), '');
+            return _buildMaskedText(digits);
+          },
+        ),
+        // TextField مخفی برای دریافت اعداد از کیبورد
+        Positioned.fill(
+          child: TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            maxLength: 8,
+            textAlign: TextAlign.center,
+            cursorColor: Colors.transparent,
+            showCursor: false,
+            style: const TextStyle(color: Colors.transparent),
+            decoration: const InputDecoration(
+              border: InputBorder.none,
+              counterText: '',
+            ),
+            onChanged: (text) {
+              final digits = text.replaceAll(RegExp(r'[^0-9]'), '');
+              onChanged(digits);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMaskedText(String digits) {
+    final monthDigits = digits.length >= 2
+        ? digits.substring(0, 2)
+        : (digits.isNotEmpty ? digits : '');
+    final dayDigits = digits.length > 2
+        ? (digits.length >= 4 ? digits.substring(2, 4) : digits.substring(2))
+        : '';
+    final yearDigits = digits.length > 4 ? digits.substring(4) : '';
+
+    const mutedStyle = TextStyle(
+      color: Color(0xFF505054), // رنگ کم‌رنگ مطابق عکس
+      fontSize: 22,
+      fontWeight: FontWeight.w500,
+      letterSpacing: 4,
+    );
+
+    const activeStyle = TextStyle(
+      color: Colors.white, // رنگ پررنگ اعداد
+      fontSize: 22,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 4,
+    );
+
+    const slashStyle = TextStyle(
+      color: Color(0xFF505054),
+      fontSize: 22,
+      fontWeight: FontWeight.w400,
+      letterSpacing: 6,
+    );
+
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center, // 👈 فقط این رو بکنش center
+          children: [
+            // بخش ماه
+            Text(
+              monthDigits.isNotEmpty ? monthDigits.split('').join(' ') : 'M M',
+              style: monthDigits.isNotEmpty ? activeStyle : mutedStyle,
+            ),
+            const Text(' / ', style: slashStyle),
+            // بخش روز
+            Text(
+              dayDigits.isNotEmpty ? dayDigits.split('').join(' ') : 'D D',
+              style: dayDigits.isNotEmpty ? activeStyle : mutedStyle,
+            ),
+            const Text(' / ', style: slashStyle),
+            // بخش سال
+            Text(
+              yearDigits.isNotEmpty ? yearDigits.split('').join(' ') : 'Y Y Y Y',
+              style: yearDigits.isNotEmpty ? activeStyle : mutedStyle,
+            ),
+          ],
         ),
       ),
     );
