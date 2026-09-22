@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'dart:typed_data';
 import '../api_client.dart';
 import '../models/profile_models.dart';
 import '../style/app_colors.dart';
+import 'photo_crop_screen.dart';
 
 /// نسخه‌ی تیره‌ی PhotoManagerScreen، مخصوص صفحه‌ی «پروفایل من» — همون
 /// endpoint‌ها رو صدا می‌زنه (آپلود/حذف/چیدمان) ولی ظاهرش دقیقاً مثل
@@ -26,15 +28,21 @@ class _PhotoGridEditorScreenState extends State<PhotoGridEditorScreen> {
 
   Future<void> _pickAndUpload(ImageSource source) async {
     HapticFeedback.lightImpact();
-    final picked = await _picker.pickImage(source: source, imageQuality: 85, maxWidth: 1600);
+    final picked = await _picker.pickImage(source: source, imageQuality: 90, maxWidth: 2000);
     if (picked == null) return;
+    final rawBytes = await picked.readAsBytes();
+    if (!mounted) return;
+    // قبل از آپلود، بذار کاربر قاب عکس رو تنظیم کنه (جابه‌جایی/زوم).
+    final croppedBytes = await Navigator.of(context).push<Uint8List>(
+      MaterialPageRoute(builder: (_) => PhotoCropScreen(imageBytes: rawBytes)),
+    );
+    if (croppedBytes == null) return; // کاربر انصراف داد
     setState(() {
       _uploading = true;
       _error = null;
     });
     try {
-      final bytes = await picked.readAsBytes();
-      final photo = await ApiClient.uploadPhoto(bytes, picked.name);
+      final photo = await ApiClient.uploadPhoto(croppedBytes, picked.name);
       setState(() => _photos = [..._photos, photo]);
     } on NetworkException {
       setState(() => _error = 'ارتباط با سرور برقرار نشد.');

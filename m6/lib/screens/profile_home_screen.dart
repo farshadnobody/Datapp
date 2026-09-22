@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../api_client.dart';
@@ -18,13 +19,9 @@ import 'start_screen.dart';
 
 /// صفحه‌ی «پروفایل من» — همون چیزی که با زدن تب Profile تو نوار پایین باز
 /// می‌شه. ساختارش دقیقاً از روی اسکرین‌شات‌های تیندر کپی شده:
-/// آواتار + Preview بالا، هشدار «Complete your profile»، ردیف پیل‌های
-/// قابل‌ویرایش (Living in / Height / Job / ...)، My Photos، My Prompts،
-/// My Interests، و بنر Gold/آمار پایین.
-///
-/// ساده‌سازی عمدی نسبت به اپ واقعی: ردیف پیل‌ها تو تیندر دو ردیفه و با
-/// اسکرول افقی جابه‌جا می‌شه؛ اینجا برای سادگی یه ردیف تک‌خطی اسکرول‌شونده
-/// است — همه‌ی پیل‌ها هستن، فقط چیدمانشون فرق داره.
+/// آواتار + Preview بالا، هشدار «Complete your profile»، ردیف دوخطی
+/// پیل‌های قابل‌ویرایش (Living in / Height / Job / ...)، My Photos، عکس‌های
+/// خصوصی، My Prompts، My Interests، و بنر Gold/آمار پایین.
 class ProfileHomeScreen extends StatefulWidget {
   const ProfileHomeScreen({super.key});
 
@@ -39,6 +36,7 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
 
   // --- کپی محلیِ قابل‌ویرایش از فیلدهای پروفایل ---
   List<Photo> _photos = [];
+  List<PrivatePhoto> _privatePhotos = [];
   final Set<String> _interests = {};
   List<PromptAnswer> _prompts = [];
   List<String> _genders = [];
@@ -100,8 +98,19 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
         _languages = List.of(profile.languages);
         _bio = profile.bio;
       });
+      _loadPrivatePhotos();
     } catch (e) {
       setState(() => _error = 'دریافت اطلاعات پروفایل با مشکل مواجه شد.');
+    }
+  }
+
+  Future<void> _loadPrivatePhotos() async {
+    // جدا از بار اصلی پروفایل، چون نبودش نباید کل صفحه رو خراب کنه.
+    try {
+      final photos = await ApiClient.fetchPrivatePhotos();
+      if (mounted) setState(() => _privatePhotos = photos);
+    } catch (_) {
+      // بی‌خیال می‌شیم؛ بخش عکس‌های خصوصی فقط خالی می‌مونه.
     }
   }
 
@@ -744,15 +753,69 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
           SizedBox(width: 8),
           Text('عکس‌های خصوصی من', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
         ]),
-        const SizedBox(height: 6),
-        const Text('این عکس‌ها هیچ‌وقت پابلیک نمی‌شن؛ فقط با اجازه‌ی تو دیده می‌شن.',
-            style: TextStyle(color: AppDark.muted, fontSize: 12.5)),
-        const SizedBox(height: 10),
-        _editLink('مدیریت عکس‌های خصوصی', () async {
-          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrivatePhotosScreen()));
-        }),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(color: AppDark.card, borderRadius: BorderRadius.circular(16)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: SizedBox(
+                  height: 92,
+                  child: _privatePhotos.isEmpty
+                      ? SizedBox(
+                          width: double.infinity,
+                          child: _dashedAddBox(onTap: () => _openPrivatePhotos()),
+                        )
+                      : Row(
+                          children: _privatePhotos
+                              .map((p) => Expanded(
+                                    child: ImageFiltered(
+                                      // این عکس‌ها خصوصی‌ان؛ تو پیش‌نمایش این باکس عمداً بلرن.
+                                      imageFilter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                                      child: Image.network(
+                                        '$backendBaseUrl${p.url}',
+                                        headers: ApiClient.authHeaders(),
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  ))
+                              .toList(),
+                        ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text('این عکس‌ها هیچ‌وقت پابلیک نمی‌شن؛ فقط با اجازه‌ی تو دیده می‌شن.',
+                        style: TextStyle(color: AppDark.muted, fontSize: 13, height: 1.4)),
+                  ),
+                  const SizedBox(width: 10),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      shape: const StadiumBorder(),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    ),
+                    onPressed: _openPrivatePhotos,
+                    child: const Text('ویرایش', style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ],
     );
+  }
+
+  Future<void> _openPrivatePhotos() async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrivatePhotosScreen()));
+    _loadPrivatePhotos();
   }
 
   Widget _dashedAddBox({required VoidCallback onTap}) {
@@ -770,80 +833,95 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
     );
   }
 
-  Widget _editLink(String text, VoidCallback onTap) {
-    return InkWell(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onTap();
-      },
-      child: Text(text, style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 13, fontWeight: FontWeight.w600)),
-    );
-  }
 
   Widget _buildPromptsSection() {
     // طبق خواسته‌ی کاربر: مستقل از سقفی که بک‌اند برمی‌گردونه، حداکثر ۴ تا
     // کارت (بیو + ۳ پرامپت) نشون بده، مثل تیندر.
     const maxPrompts = 4;
+    final cards = <Widget>[
+      _promptCard(title: 'درباره‌ی من', body: _bio, onTap: _editBio),
+      for (final p in _prompts)
+        _promptCard(
+          title: _promptTextMap[p.promptId] ?? '',
+          body: p.answer,
+          onTap: () => _addOrEditPrompt(p),
+        ),
+      if (_prompts.length + 1 < maxPrompts) _addPromptCard(),
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionTitle('My Prompts'),
         const SizedBox(height: 12),
-        _promptCard(title: 'درباره‌ی من', body: _bio, onTap: _editBio),
-        for (final p in _prompts) ...[
-          const SizedBox(height: 12),
-          _promptCard(
-            title: _promptTextMap[p.promptId] ?? '',
-            body: p.answer,
-            onTap: () => _addOrEditPrompt(p),
-          ),
-        ],
-        if (_prompts.length + 1 < maxPrompts) ...[
-          const SizedBox(height: 12),
-          _addPromptCard(),
-        ],
+        _twoColumnGrid(cards),
       ],
     );
   }
 
-  /// کارت‌های My Prompts مستطیل افقی‌ان (عریض و کوتاه)، نه چهارگوش.
-  Widget _promptCard({required String title, required String body, required VoidCallback onTap}) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-        decoration: BoxDecoration(color: AppDark.card, borderRadius: BorderRadius.circular(14)),
+  /// شبکه‌ی دوستونه با کارت‌های مستطیل «عمودی» (بلندتر از عرض)، دقیقاً مثل
+  /// چیدمان My Prompts/My Interests تو تیندر.
+  Widget _twoColumnGrid(List<Widget> cards) {
+    final rows = <Widget>[];
+    for (var i = 0; i < cards.length; i += 2) {
+      final hasSecond = i + 1 < cards.length;
+      rows.add(Padding(
+        padding: EdgeInsets.only(bottom: i + 2 < cards.length ? 12 : 0),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: AppDark.muted, fontSize: 12)),
-                  const SizedBox(height: 6),
-                  Text(body.isEmpty ? '—' : body,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
-            const CircleAvatar(
-              radius: 14,
-              backgroundColor: Colors.black54,
-              child: Icon(Icons.edit, size: 14, color: Colors.white),
-            ),
+            Expanded(child: cards[i]),
+            const SizedBox(width: 12),
+            Expanded(child: hasSecond ? cards[i + 1] : const SizedBox.shrink()),
           ],
         ),
+      ));
+    }
+    return Column(children: rows);
+  }
+
+  /// کارت‌های My Prompts مستطیل عمودی‌ان (بلندتر از عرض)، تو یه شبکه‌ی
+  /// دوستونه — دقیقاً مثل نمونه‌ی تیندر.
+  Widget _promptCard({required String title, required String body, required VoidCallback onTap}) {
+    return Stack(children: [
+      InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          height: 160,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(color: AppDark.card, borderRadius: BorderRadius.circular(14)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: AppDark.muted, fontSize: 12)),
+              const SizedBox(height: 8),
+              Expanded(
+                child: Text(body.isEmpty ? '—' : body,
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+        ),
       ),
-    );
+      Positioned(
+        bottom: 8,
+        left: 8,
+        child: GestureDetector(
+          onTap: onTap,
+          child: const CircleAvatar(
+            radius: 13,
+            backgroundColor: Colors.black54,
+            child: Icon(Icons.edit, size: 13, color: Colors.white),
+          ),
+        ),
+      ),
+    ]);
   }
 
   Widget _addPromptCard() {
@@ -852,18 +930,17 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
       onTap: () => _addOrEditPrompt(),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 18),
+        height: 160,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: AppDark.border),
         ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+        child: const Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
             Icon(Icons.add_circle_outline, color: Colors.white),
-            SizedBox(width: 10),
-            Text('یه پرامپت انتخاب کن', style: TextStyle(color: AppDark.muted, fontSize: 13)),
-          ],
+            SizedBox(height: 8),
+            Text('یه پرامپت انتخاب کن', style: TextStyle(color: AppDark.muted, fontSize: 13), textAlign: TextAlign.center),
+          ]),
         ),
       ),
     );
@@ -893,38 +970,49 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
       children: [
         _sectionTitle('My Interests'),
         const SizedBox(height: 12),
-        _interestsCard(title: 'الان به این علاقه دارم', body: summary, onTap: _editInterests),
-        const SizedBox(height: 12),
-        _interestsCard(
-          title: 'مشغول گوش دادن به',
-          body: 'انتخاب آهنگ',
-          onTap: () =>
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('این قابلیت به‌زودی اضافه می‌شه.'))),
-        ),
+        _twoColumnGrid([
+          _interestsCard(title: 'الان به این علاقه دارم', body: summary, onTap: _editInterests, showAddBadge: true),
+          _interestsCard(
+            title: 'مشغول گوش دادن به',
+            body: 'انتخاب آهنگ',
+            showAddBadge: true,
+            onTap: () => ScaffoldMessenger.of(context)
+                .showSnackBar(const SnackBar(content: Text('این قابلیت به‌زودی اضافه می‌شه.'))),
+          ),
+        ]),
         const SizedBox(height: 12),
         _interestsCard(
           title: 'هنرمندهای پرتکرارم',
           body: 'اتصال Spotify',
-          onTap: () =>
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('این قابلیت به‌زودی اضافه می‌شه.'))),
+          fullWidth: true,
+          onTap: () => ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('این قابلیت به‌زودی اضافه می‌شه.'))),
         ),
       ],
     );
   }
 
-  /// کارت‌های My Interests هم مثل My Prompts مستطیل افقی‌ان؛ گوشه‌ی بالا-چپش
-  /// یه دایره‌ی سفید با «+» داره (دقیقاً مثل تیندر).
-  Widget _interestsCard({required String title, required String body, required VoidCallback onTap}) {
+  /// کارت‌های My Interests هم مستطیل عمودی‌ان؛ گوشه‌ی بالا-چپشون یه دایره‌ی
+  /// سفید با «+» دارن (دقیقاً مثل تیندر).
+  Widget _interestsCard({
+    required String title,
+    required String body,
+    required VoidCallback onTap,
+    bool showAddBadge = false,
+    bool fullWidth = false,
+  }) {
     return Stack(children: [
       InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: onTap,
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          height: fullWidth ? 90 : 160,
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(color: AppDark.card, borderRadius: BorderRadius.circular(14)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(title, style: const TextStyle(color: AppDark.muted, fontSize: 12)),
               const SizedBox(height: 6),
@@ -936,18 +1024,19 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
           ),
         ),
       ),
-      Positioned(
-        top: 10,
-        left: 10,
-        child: GestureDetector(
-          onTap: onTap,
-          child: const CircleAvatar(
-            radius: 13,
-            backgroundColor: Colors.white,
-            child: Icon(Icons.add, size: 16, color: Colors.black),
+      if (showAddBadge)
+        Positioned(
+          top: 10,
+          left: 10,
+          child: GestureDetector(
+            onTap: onTap,
+            child: const CircleAvatar(
+              radius: 13,
+              backgroundColor: Colors.white,
+              child: Icon(Icons.add, size: 16, color: Colors.black),
+            ),
           ),
         ),
-      ),
     ]);
   }
 
