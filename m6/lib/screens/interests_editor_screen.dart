@@ -145,7 +145,7 @@ class _InterestsEditorScreenState extends State<InterestsEditorScreen> {
                                       style: TextStyle(
                                           color: selected ? Colors.black : Colors.white,
                                           fontSize: 13.5,
-                                          fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
+                                          fontWeight: FontWeight.w600)),
                                 ),
                               );
                             }).toList(),

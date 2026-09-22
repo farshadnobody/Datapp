@@ -558,7 +558,7 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
       bool showDot = false,
     }) {
       return Padding(
-        padding: const EdgeInsetsDirectional.only(start: 10),
+        padding: const EdgeInsetsDirectional.only(start: 10, top: 4),
         child: Stack(clipBehavior: Clip.none, children: [
           InkWell(
             borderRadius: BorderRadius.circular(20),
@@ -581,73 +581,93 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
             ),
           ),
           if (showDot)
-            const Positioned(
-              top: -2,
-              right: 2,
-              child: CircleAvatar(radius: 4, backgroundColor: AppDark.warning),
+            Positioned(
+              top: -3,
+              right: 1,
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppDark.warning,
+                  border: Border.all(color: AppDark.bg, width: 1.5),
+                ),
+              ),
             ),
         ]),
       );
     }
 
-    return SizedBox(
-      height: 44,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
+    // طبق اسکرین‌شات‌های تیندر، این ردیف دو خطیه: ردیف اول Living in تا
+    // Gender/Orientation (۵ تا)، ردیف دوم Basics تا Languages (۴ تا) — و کل
+    // دو ردیف با هم یه اسکرول افقی مشترک دارن (نه هرکدوم جدا). برای همینم
+    // هر دو Row داخل یه Column واحدن که خودش تو یه اسکرول افقی نشسته، نه دو
+    // تا ListView جدا.
+    final row1 = [
+      pill(
+        icon: Icons.home_outlined,
+        label: (_cityName?.isNotEmpty ?? false) ? _cityName! : 'زندگی در',
+        filled: _cityName?.isNotEmpty ?? false,
+        onTap: _editLivingIn,
+      ),
+      pill(
+        icon: Icons.straighten,
+        label: _heightCm != null ? '${_heightCm}cm' : 'قد',
+        filled: _heightCm != null,
+        onTap: _editHeight,
+      ),
+      pill(
+        icon: Icons.work_outline,
+        label: (_jobTitle?.isNotEmpty ?? false) ? _jobTitle! : 'شغل',
+        filled: _jobTitle?.isNotEmpty ?? false,
+        showDot: !(_jobTitle?.isNotEmpty ?? false),
+        onTap: _editJob,
+      ),
+      pill(
+        icon: Icons.school_outlined,
+        label: (_school?.isNotEmpty ?? false) ? _school! : 'تحصیلات',
+        filled: _school?.isNotEmpty ?? false,
+        showDot: !(_school?.isNotEmpty ?? false),
+        onTap: _editEducation,
+      ),
+      pill(
+        icon: Icons.wc_outlined,
+        label: 'جنسیت، گرایش',
+        onTap: _editIdentity,
+      ),
+    ];
+    final row2 = [
+      pill(
+        icon: Icons.extension_outlined,
+        label: 'Basics (${_basicsFilledCount}/${kAboutYouCategories.length + 2})',
+        onTap: _editBasics,
+      ),
+      pill(
+        icon: Icons.local_bar_outlined,
+        label: 'Lifestyle (${_lifestyleFilledCount}/${kLifestyleCategories.length})',
+        onTap: _editLifestyle,
+      ),
+      pill(
+        icon: Icons.search,
+        label: optionLabel(kLookingForOptions, _lookingFor) ?? 'دنبال چی هستی',
+        filled: _lookingFor != null,
+        onTap: _editLookingFor,
+      ),
+      pill(
+        icon: Icons.translate,
+        label: _languages.isEmpty ? 'زبان‌ها' : '${_languages.length} زبان',
+        filled: _languages.isNotEmpty,
+        onTap: _editLanguages,
+      ),
+    ];
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          pill(
-            icon: Icons.home_outlined,
-            label: (_cityName?.isNotEmpty ?? false) ? _cityName! : 'زندگی در',
-            filled: _cityName?.isNotEmpty ?? false,
-            onTap: _editLivingIn,
-          ),
-          pill(
-            icon: Icons.straighten,
-            label: _heightCm != null ? '${_heightCm}cm' : 'قد',
-            filled: _heightCm != null,
-            onTap: _editHeight,
-          ),
-          pill(
-            icon: Icons.work_outline,
-            label: (_jobTitle?.isNotEmpty ?? false) ? _jobTitle! : 'شغل',
-            filled: _jobTitle?.isNotEmpty ?? false,
-            showDot: !(_jobTitle?.isNotEmpty ?? false),
-            onTap: _editJob,
-          ),
-          pill(
-            icon: Icons.school_outlined,
-            label: (_school?.isNotEmpty ?? false) ? _school! : 'تحصیلات',
-            filled: _school?.isNotEmpty ?? false,
-            showDot: !(_school?.isNotEmpty ?? false),
-            onTap: _editEducation,
-          ),
-          pill(
-            icon: Icons.wc_outlined,
-            label: 'جنسیت، گرایش',
-            onTap: _editIdentity,
-          ),
-          pill(
-            icon: Icons.extension_outlined,
-            label: 'Basics (${_basicsFilledCount}/${kAboutYouCategories.length + 2})',
-            onTap: _editBasics,
-          ),
-          pill(
-            icon: Icons.local_bar_outlined,
-            label: 'Lifestyle (${_lifestyleFilledCount}/${kLifestyleCategories.length})',
-            onTap: _editLifestyle,
-          ),
-          pill(
-            icon: Icons.search,
-            label: optionLabel(kLookingForOptions, _lookingFor) ?? 'دنبال چی هستی',
-            filled: _lookingFor != null,
-            onTap: _editLookingFor,
-          ),
-          pill(
-            icon: Icons.translate,
-            label: _languages.isEmpty ? 'زبان‌ها' : '${_languages.length} زبان',
-            filled: _languages.isNotEmpty,
-            onTap: _editLanguages,
-          ),
+          Row(children: row1),
+          Row(children: row2),
         ],
       ),
     );
@@ -662,26 +682,55 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
       children: [
         _sectionTitle('عکس‌های من'),
         const SizedBox(height: 12),
-        SizedBox(
-          height: 96,
-          child: Row(children: [
-            Expanded(
-              child: _photos.isEmpty
-                  ? _dashedAddBox(onTap: _editPhotos)
-                  : ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _photos.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
-                      itemBuilder: (context, i) => ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Image.network('$backendBaseUrl${_photos[i].url}', width: 72, fit: BoxFit.cover),
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(color: AppDark.card, borderRadius: BorderRadius.circular(16)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: SizedBox(
+                  height: 92,
+                  child: _photos.isEmpty
+                      ? SizedBox(width: double.infinity, child: _dashedAddBox(onTap: _editPhotos))
+                      : Row(
+                          children: _photos
+                              .map((p) => Expanded(child: Image.network('$backendBaseUrl${p.url}', fit: BoxFit.cover)))
+                              .toList(),
+                        ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: RichText(
+                      text: const TextSpan(
+                        style: TextStyle(color: AppDark.muted, fontSize: 13, height: 1.4),
+                        children: [
+                          TextSpan(text: 'نکته: ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+                          TextSpan(text: 'برای تنوع بیشتر، عکس‌های متفاوت اضافه کن.'),
+                        ],
                       ),
                     ),
-            ),
-          ]),
+                  ),
+                  const SizedBox(width: 10),
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      shape: const StadiumBorder(),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    ),
+                    onPressed: _editPhotos,
+                    child: const Text('ویرایش', style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 10),
-        _editLink('ویرایش عکس‌ها', _editPhotos),
       ],
     );
   }
@@ -711,9 +760,8 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
       child: Container(
-        width: 72,
         decoration: BoxDecoration(
-          color: AppDark.card,
+          color: AppDark.cardAlt,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: AppDark.border),
         ),
@@ -733,94 +781,69 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
   }
 
   Widget _buildPromptsSection() {
-    final maxPrompts = _options?.limits.maxPrompts ?? 3;
+    // طبق خواسته‌ی کاربر: مستقل از سقفی که بک‌اند برمی‌گردونه، حداکثر ۴ تا
+    // کارت (بیو + ۳ پرامپت) نشون بده، مثل تیندر.
+    const maxPrompts = 4;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionTitle('My Prompts'),
         const SizedBox(height: 12),
-        Row(children: [
-          Expanded(child: _promptCard(title: 'درباره‌ی من', body: _bio, onTap: _editBio)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _prompts.isNotEmpty
-                ? _promptCard(
-                    title: _promptTextMap[_prompts.first.promptId] ?? '',
-                    body: _prompts.first.answer,
-                    onTap: () => _addOrEditPrompt(_prompts.first),
-                  )
-                : _addPromptCard(),
+        _promptCard(title: 'درباره‌ی من', body: _bio, onTap: _editBio),
+        for (final p in _prompts) ...[
+          const SizedBox(height: 12),
+          _promptCard(
+            title: _promptTextMap[p.promptId] ?? '',
+            body: p.answer,
+            onTap: () => _addOrEditPrompt(p),
           ),
-        ]),
-        if (_prompts.length > 1)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: _prompts
-                  .skip(1)
-                  .map((p) => SizedBox(
-                        width: (MediaQuery.of(context).size.width - 52) / 2,
-                        child: _promptCard(
-                          title: _promptTextMap[p.promptId] ?? '',
-                          body: p.answer,
-                          onTap: () => _addOrEditPrompt(p),
-                        ),
-                      ))
-                  .toList(),
-            ),
-          ),
-        if (_prompts.length + 1 < maxPrompts)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: SizedBox(width: (MediaQuery.of(context).size.width - 52) / 2, child: _addPromptCard()),
-          ),
+        ],
+        if (_prompts.length + 1 < maxPrompts) ...[
+          const SizedBox(height: 12),
+          _addPromptCard(),
+        ],
       ],
     );
   }
 
+  /// کارت‌های My Prompts مستطیل افقی‌ان (عریض و کوتاه)، نه چهارگوش.
   Widget _promptCard({required String title, required String body, required VoidCallback onTap}) {
-    return Stack(children: [
-      InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          width: double.infinity,
-          height: 150,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(color: AppDark.card, borderRadius: BorderRadius.circular(14)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppDark.muted, fontSize: 12)),
-              const SizedBox(height: 8),
-              Expanded(
-                child: Text(body.isEmpty ? '—' : body,
-                    maxLines: 4,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        decoration: BoxDecoration(color: AppDark.card, borderRadius: BorderRadius.circular(14)),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: AppDark.muted, fontSize: 12)),
+                  const SizedBox(height: 6),
+                  Text(body.isEmpty ? '—' : body,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+                ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 10),
+            const CircleAvatar(
+              radius: 14,
+              backgroundColor: Colors.black54,
+              child: Icon(Icons.edit, size: 14, color: Colors.white),
+            ),
+          ],
         ),
       ),
-      Positioned(
-        bottom: 8,
-        left: 8,
-        child: GestureDetector(
-          onTap: onTap,
-          child: const CircleAvatar(
-            radius: 13,
-            backgroundColor: Colors.black54,
-            child: Icon(Icons.edit, size: 13, color: Colors.white),
-          ),
-        ),
-      ),
-    ]);
+    );
   }
 
   Widget _addPromptCard() {
@@ -829,17 +852,18 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
       onTap: () => _addOrEditPrompt(),
       child: Container(
         width: double.infinity,
-        height: 150,
+        padding: const EdgeInsets.symmetric(vertical: 18),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: AppDark.border),
         ),
-        child: const Center(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
             Icon(Icons.add_circle_outline, color: Colors.white),
-            SizedBox(height: 8),
+            SizedBox(width: 10),
             Text('یه پرامپت انتخاب کن', style: TextStyle(color: AppDark.muted, fontSize: 13)),
-          ]),
+          ],
         ),
       ),
     );
@@ -869,50 +893,62 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
       children: [
         _sectionTitle('My Interests'),
         const SizedBox(height: 12),
-        Row(children: [
-          Expanded(
-            child: _interestsCard(
-              title: 'الان به این علاقه دارم',
-              body: summary,
-              onTap: _editInterests,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _interestsCard(
-              title: 'مشغول گوش دادن به',
-              body: 'انتخاب آهنگ',
-              onTap: () => ScaffoldMessenger.of(context)
-                  .showSnackBar(const SnackBar(content: Text('این قابلیت به‌زودی اضافه می‌شه.'))),
-            ),
-          ),
-        ]),
+        _interestsCard(title: 'الان به این علاقه دارم', body: summary, onTap: _editInterests),
+        const SizedBox(height: 12),
+        _interestsCard(
+          title: 'مشغول گوش دادن به',
+          body: 'انتخاب آهنگ',
+          onTap: () =>
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('این قابلیت به‌زودی اضافه می‌شه.'))),
+        ),
+        const SizedBox(height: 12),
+        _interestsCard(
+          title: 'هنرمندهای پرتکرارم',
+          body: 'اتصال Spotify',
+          onTap: () =>
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('این قابلیت به‌زودی اضافه می‌شه.'))),
+        ),
       ],
     );
   }
 
+  /// کارت‌های My Interests هم مثل My Prompts مستطیل افقی‌ان؛ گوشه‌ی بالا-چپش
+  /// یه دایره‌ی سفید با «+» داره (دقیقاً مثل تیندر).
   Widget _interestsCard({required String title, required String body, required VoidCallback onTap}) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        height: 110,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: AppDark.card, borderRadius: BorderRadius.circular(14)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(color: AppDark.muted, fontSize: 12)),
-            const SizedBox(height: 8),
-            Text(body,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
-          ],
+    return Stack(children: [
+      InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          decoration: BoxDecoration(color: AppDark.card, borderRadius: BorderRadius.circular(14)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(color: AppDark.muted, fontSize: 12)),
+              const SizedBox(height: 6),
+              Text(body,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+            ],
+          ),
         ),
       ),
-    );
+      Positioned(
+        top: 10,
+        left: 10,
+        child: GestureDetector(
+          onTap: onTap,
+          child: const CircleAvatar(
+            radius: 13,
+            backgroundColor: Colors.white,
+            child: Icon(Icons.add, size: 16, color: Colors.black),
+          ),
+        ),
+      ),
+    ]);
   }
 
   Widget _buildGoldBanner() {

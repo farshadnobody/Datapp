@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import '../style/app_colors.dart';
+import 'location_picker_screen.dart';
 
 /// صفحه‌ی «زندگی در ...» — عکس ۱۱. چون تو این پروژه پکیج geocoding نداریم
 /// (فقط geolocator برای مختصات)، «نزدیک موقعیت فعلی» فقط مختصات رو می‌گیره
@@ -52,6 +53,17 @@ class _LivingInScreenState extends State<LivingInScreen> {
     }
   }
 
+  Future<void> _pickFromMap() async {
+    HapticFeedback.lightImpact();
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const LocationPickerScreen()),
+    );
+    // LocationPickerScreen خودش مختصات رو مستقیم به سرور می‌فرسته (ذخیره
+    // می‌شه)؛ اینجا فقط یه برچسب نمایشی برمی‌گردونیم چون اسم واقعی شهر رو
+    // نداریم (بدون geocoding).
+    if (saved == true && mounted) Navigator.of(context).pop('موقعیت انتخاب‌شده روی نقشه');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -92,6 +104,12 @@ class _LivingInScreenState extends State<LivingInScreen> {
               ),
             ),
             const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.map_outlined, color: Colors.white),
+              title: const Text('انتخاب از روی نقشه', style: TextStyle(color: Colors.white)),
+              onTap: _pickFromMap,
+            ),
+            const Divider(color: AppDark.border, height: 1),
             ListTile(
               leading: _locating
                   ? const SizedBox(

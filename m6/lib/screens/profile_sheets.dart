@@ -75,11 +75,12 @@ Widget _pill({required String label, required bool selected, required VoidCallba
         border: Border.all(color: selected ? Colors.white : AppDark.border, width: 1.2),
         color: selected ? Colors.white : Colors.transparent,
       ),
+      // نکته: قبلاً وزن فونت گزینه‌ی انتخاب‌شده رو بولدتر می‌کردیم که باعث
+      // می‌شد عرض پیل عوض بشه و گزینه‌ی کناری‌اش تو Wrap بپره ردیف بعد؛
+      // برای همین وزن فونت همیشه ثابته و فقط رنگ/پس‌زمینه تغییر می‌کنه.
       child: Text(label,
           style: TextStyle(
-              color: selected ? Colors.black : Colors.white,
-              fontSize: 13.5,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500)),
+              color: selected ? Colors.black : Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600)),
     ),
   );
 }
