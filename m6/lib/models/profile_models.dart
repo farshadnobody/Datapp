@@ -113,6 +113,17 @@ class ProfileInput {
   final Map<String, String> lifestyle; // مثلا {"drinking": "socially", ...}
   final Map<String, String> aboutYou; // مثلا {"communication": "phone_caller", ...}
 
+  // --- فیلدهای جدید صفحه‌ی «پروفایل من» (قد/شغل/تحصیلات/شهر/بچه/زبان) ---
+  // مثل بالا: همه اختیاری‌ان، فقط تو JSON خروجی می‌رن؛ برای ذخیره‌ی واقعی
+  // باید ستون معادل تو بک‌اند (Go) هم اضافه بشه.
+  final int? heightCm;
+  final String? jobTitle;
+  final String? jobCompany;
+  final String? cityName; // برچسب نمایشی «زندگی در ...» (نه مختصات)
+  final bool showCityOnProfile;
+  final String? wantChildren;
+  final List<String> languages;
+
   ProfileInput({
     required this.name,
     required this.birthDate,
@@ -131,6 +142,13 @@ class ProfileInput {
     this.school,
     this.lifestyle = const {},
     this.aboutYou = const {},
+    this.heightCm,
+    this.jobTitle,
+    this.jobCompany,
+    this.cityName,
+    this.showCityOnProfile = true,
+    this.wantChildren,
+    this.languages = const [],
   });
 
   Map<String, dynamic> toJson() => {
@@ -151,6 +169,13 @@ class ProfileInput {
         if (school != null && school!.isNotEmpty) 'school': school,
         'lifestyle': lifestyle,
         'about_you': aboutYou,
+        if (heightCm != null) 'height_cm': heightCm,
+        if (jobTitle != null && jobTitle!.isNotEmpty) 'job_title': jobTitle,
+        if (jobCompany != null && jobCompany!.isNotEmpty) 'job_company': jobCompany,
+        if (cityName != null && cityName!.isNotEmpty) 'city_name': cityName,
+        'show_city_on_profile': showCityOnProfile,
+        if (wantChildren != null) 'want_children': wantChildren,
+        'languages': languages,
       };
 }
 
@@ -194,6 +219,26 @@ class MyProfile {
   final List<Photo> photos;
   final String publicId;
 
+  // --- همون فیلدهای اختیاری صفحه‌ی «پروفایل من» — اگه بک‌اند نفرستدشون،
+  // مقدار پیش‌فرض (null/خالی) می‌گیرن و اپ خراب نمی‌شه. ---
+  final List<String> genders;
+  final bool showGenderOnProfile;
+  final List<String> sexualOrientations;
+  final bool showOrientationOnProfile;
+  final List<String> interestedInMulti;
+  final String? lookingFor;
+  final String? educationLevel;
+  final String? school;
+  final Map<String, String> lifestyle;
+  final Map<String, String> aboutYou;
+  final int? heightCm;
+  final String? jobTitle;
+  final String? jobCompany;
+  final String? cityName;
+  final bool showCityOnProfile;
+  final String? wantChildren;
+  final List<String> languages;
+
   MyProfile({
     required this.name,
     required this.birthDate,
@@ -205,6 +250,23 @@ class MyProfile {
     required this.prompts,
     required this.photos,
     required this.publicId,
+    this.genders = const [],
+    this.showGenderOnProfile = true,
+    this.sexualOrientations = const [],
+    this.showOrientationOnProfile = false,
+    this.interestedInMulti = const [],
+    this.lookingFor,
+    this.educationLevel,
+    this.school,
+    this.lifestyle = const {},
+    this.aboutYou = const {},
+    this.heightCm,
+    this.jobTitle,
+    this.jobCompany,
+    this.cityName,
+    this.showCityOnProfile = true,
+    this.wantChildren,
+    this.languages = const [],
   });
 
   factory MyProfile.fromJson(Map<String, dynamic> json) => MyProfile(
@@ -222,6 +284,23 @@ class MyProfile {
             .map((e) => Photo.fromJson(e))
             .toList(),
         publicId: json['public_id'] ?? '',
+        genders: List<String>.from(json['genders'] ?? []),
+        showGenderOnProfile: json['show_gender_on_profile'] ?? true,
+        sexualOrientations: List<String>.from(json['sexual_orientations'] ?? []),
+        showOrientationOnProfile: json['show_orientation_on_profile'] ?? false,
+        interestedInMulti: List<String>.from(json['interested_in_multi'] ?? []),
+        lookingFor: json['looking_for'] as String?,
+        educationLevel: json['education_level'] as String?,
+        school: json['school'] as String?,
+        lifestyle: _stringMap(json['lifestyle']),
+        aboutYou: _stringMap(json['about_you']),
+        heightCm: json['height_cm'] as int?,
+        jobTitle: json['job_title'] as String?,
+        jobCompany: json['job_company'] as String?,
+        cityName: json['city_name'] as String?,
+        showCityOnProfile: json['show_city_on_profile'] ?? true,
+        wantChildren: json['want_children'] as String?,
+        languages: List<String>.from(json['languages'] ?? []),
       );
 }
 

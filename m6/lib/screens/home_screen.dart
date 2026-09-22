@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../auth_session.dart';
 import '../swipe/swipe_style.dart';
-import 'edit_profile_screen.dart';
 import 'matches_screen.dart';
-import 'private_photos_screen.dart';
-import 'start_screen.dart';
+import 'profile_home_screen.dart';
 import 'swipe_screen.dart';
 
 /// صفحه‌ی اصلی اپ — پوسته‌ی سبک تیندر با نوار پایین:
@@ -96,7 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: MatchesScreen(key: ValueKey<int>(_chatRefresh)),
                 ),
               ),
-              _lazy(4, () => const _ProfileTab()),
+              _lazy(4, () => const ProfileHomeScreen()),
             ],
           ),
           bottomNavigationBar: _BottomNav(
@@ -302,87 +299,3 @@ class _ComingSoonTab extends StatelessWidget {
   }
 }
 
-/// دکمه‌هایی که قبلاً تو صفحه‌ی اصلی بود، این‌جا تو تب پروفایل.
-class _ProfileTab extends StatelessWidget {
-  const _ProfileTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
-        children: [
-          const Text(
-            'پروفایل',
-            style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 20),
-          _tile(
-            context,
-            icon: Icons.edit_outlined,
-            label: 'ویرایش پروفایل',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const EditProfileScreen()),
-            ),
-          ),
-          _tile(
-            context,
-            icon: Icons.lock_outline,
-            label: 'عکس‌های خصوصی',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const PrivatePhotosScreen()),
-            ),
-          ),
-          _tile(
-            context,
-            icon: Icons.logout,
-            label: 'خروج از حساب',
-            onTap: () async {
-              // توکن ذخیره‌شده رو هم پاک می‌کنه تا دفعه‌ی بعد دوباره لاگین بخواد.
-              await AuthSession.clear();
-              if (!context.mounted) return;
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const StartScreen()),
-                (route) => false,
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _tile(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Material(
-        color: const Color(0xFF121214),
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () {
-            HapticFeedback.lightImpact();
-            onTap();
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-            child: Row(
-              children: [
-                Icon(icon, color: Colors.white),
-                const SizedBox(width: 14),
-                Text(label, style: const TextStyle(color: Colors.white, fontSize: 16)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

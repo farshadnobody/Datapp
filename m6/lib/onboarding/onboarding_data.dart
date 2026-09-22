@@ -103,16 +103,49 @@ const List<OptionCategory> kLifestyleCategories = [
   OptionCategory('pets', 'حیوون خونگی داری؟', [
     OptionItem('dog', 'سگ'),
     OptionItem('cat', 'گربه'),
+    OptionItem('reptile', 'خزنده'),
+    OptionItem('amphibian', 'دوزیست'),
     OptionItem('bird', 'پرنده'),
     OptionItem('fish', 'ماهی'),
-    OptionItem('other', 'چیز دیگه'),
     OptionItem('no_pet_but_love', 'ندارم ولی دوست دارم'),
-    OptionItem('want_a_pet', 'می‌خوام بگیرم'),
-    OptionItem('all_the_pets', 'همه رو دوست دارم'),
-    OptionItem('allergic', 'حساسیت دارم'),
+    OptionItem('other', 'چیز دیگه'),
+    OptionItem('turtle', 'لاک‌پشت'),
+    OptionItem('hamster', 'همستر'),
+    OptionItem('rabbit', 'خرگوش'),
     OptionItem('pet_free', 'ترجیح می‌دم نداشته باشم'),
+    OptionItem('all_the_pets', 'همه رو دوست دارم'),
+    OptionItem('want_a_pet', 'می‌خوام بگیرم'),
+    OptionItem('allergic', 'حساسیت دارم'),
+  ]),
+  // این دسته تو مرحله‌ی اونبوردینگ نبود، ولی تو باتم‌شیت «Lifestyle» صفحه‌ی
+  // پروفایل هست (بعد از «ورزش می‌کنی؟») — طبق اسکرین‌شات‌های تیندر.
+  OptionCategory('social_media', 'چقدر تو شبکه‌های اجتماعی فعالی؟', [
+    OptionItem('influencer', 'اینفلوئنسرم'),
+    OptionItem('socially_active', 'فعالم'),
+    OptionItem('off_the_grid', 'اصلاً نیستم'),
+    OptionItem('passive_scroller', 'فقط اسکرول می‌کنم'),
   ]),
 ];
+
+// مرحله‌ی «بچه می‌خوای؟» — تو باتم‌شیت «Basics» صفحه‌ی پروفایل کنار برج و
+// تحصیلات و سبک ارتباطی میاد. تو فلوی اونبوردینگ فعلاً پرسیده نمی‌شه.
+const List<OptionItem> kWantChildrenOptions = [
+  OptionItem('want_children', 'بچه می‌خوام'),
+  OptionItem('dont_want_children', 'بچه نمی‌خوام'),
+  OptionItem('have_and_want_more', 'دارم و بازم می‌خوام'),
+  OptionItem('have_dont_want_more', 'دارم و دیگه نمی‌خوام'),
+  OptionItem('not_sure', 'هنوز مطمئن نیستم'),
+];
+
+/// برچسب یه id رو از یه لیست OptionItem پیدا می‌کنه؛ اگه نبود null.
+/// جای این‌که هر فایل جدا همین تابع رو دوباره بنویسه، یه بار همین‌جاست.
+String? optionLabel(List<OptionItem> items, String? id) {
+  if (id == null) return null;
+  for (final i in items) {
+    if (i.id == id) return i.label;
+  }
+  return null;
+}
 
 // مرحله‌ی «چی تو رو، تو می‌کنه» — هر دسته تک‌انتخابیه
 const List<OptionCategory> kAboutYouCategories = [
