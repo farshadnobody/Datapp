@@ -6,11 +6,13 @@ import '../onboarding/onboarding_data.dart';
 import '../style/app_colors.dart';
 import '../widgets/my_profile_detail_sheet.dart';
 
-/// «Preview Profile» — همون رفتار کارت‌های Swipe (`SwipeProfileCard`) رو
-/// عیناً برای پروفایل خودت تکرار می‌کنه: هر عکس یه «بلوک اطلاعات» زیر اسم
-/// نشون می‌ده (بیو ← دنبال چی می‌گردی ← علاقه‌مندی‌ها ← مشخصات)، بدون نیاز
-/// به زدن فلش. فلش کنار اسم (دقیقاً همون دکمه‌ی گرد نیمه‌شفاف کارت‌های
-/// سواپ) برای دیدن *همه‌ی* بخش‌ها با هم، صفحه رو به پایین اسکرول می‌کنه.
+/// «Preview Profile» — عیناً رفتار پروفایل تو تیندر: باکس عکس تمام‌قد با
+/// گرادینت مشکی پایین، اسم و «بلوک اطلاعات» (بیو ← دنبال چی می‌گردی ←
+/// علاقه‌مندی‌ها ← مشخصات) روی همون گرادینت. اطلاعات کامل پروفایل
+/// (MyProfileDetailSheet) به‌صورت پیش‌فرض دیده نمی‌شه؛ فقط با زدن فلش کنار
+/// اسم، از پایین به شکل یه شیت میاد روی عکس — همزمان اسم/گرادینت/بلوکِ روی
+/// عکس محو می‌شن و به‌جاش بالای شیت یه هدر با اسم و فلشِ روبه‌پایین (برای
+/// بستن) نشون داده می‌شه.
 class PreviewProfileScreen extends StatefulWidget {
   final MyProfile profile;
   final Map<String, String> promptTextMap;
@@ -31,9 +33,7 @@ enum _Block { bio, lookingFor, interests, basics }
 
 class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
   int _index = 0;
-  final _scrollController = ScrollController();
-
-  static const double _photoCardHeight = 560;
+  bool _expanded = false;
 
   List<String> get _urls => widget.profile.photos.map((p) => '$backendBaseUrl${p.url}').toList();
 
@@ -105,12 +105,6 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
     return id;
   }
 
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
   void _onTapUp(TapUpDetails d, double width) {
     final count = _urls.length;
     if (count <= 1) return;
@@ -124,14 +118,9 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
     setState(() => _index = next);
   }
 
-  void _scrollToDetails() {
+  void _toggleExpanded() {
     HapticFeedback.lightImpact();
-    _scrollController.animateTo(_photoCardHeight, duration: const Duration(milliseconds: 320), curve: Curves.easeOut);
-  }
-
-  void _scrollToTop() {
-    HapticFeedback.lightImpact();
-    _scrollController.animateTo(0, duration: const Duration(milliseconds: 320), curve: Curves.easeOut);
+    setState(() => _expanded = !_expanded);
   }
 
   Widget _buildBlock(_Block block) {
@@ -202,9 +191,7 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
         backgroundColor: AppDark.cardAlt,
         body: SafeArea(
           bottom: false,
-          child: ListView(
-            controller: _scrollController,
-            padding: EdgeInsets.zero,
+          child: Column(
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -216,13 +203,14 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
                   const Text('پیش‌نمایش پروفایل', style: TextStyle(color: Colors.white, fontSize: 17)),
                 ]),
               ),
-              SizedBox(
-                height: _photoCardHeight,
+              // باکس عکس — تمام ارتفاعِ باقی‌مونده‌ی صفحه، دقیقاً مثل تیندر.
+              Expanded(
                 child: Padding(
                   padding: const EdgeInsets.all(12),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(20),
                     child: LayoutBuilder(builder: (context, constraints) {
+                      final sheetHeight = constraints.maxHeight * 0.76;
                       return Stack(
                         fit: StackFit.expand,
                         children: [
@@ -234,29 +222,34 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
                           else
                             Image.network(urls[_index.clamp(0, urls.length - 1)],
                                 fit: BoxFit.cover, gaplessPlayback: true),
-                          const Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            height: 230,
+
+                          // گرادینت مشکیِ پایین — محو می‌شه وقتی شیتِ اطلاعات باز می‌شه.
+                          AnimatedOpacity(
+                            duration: const Duration(milliseconds: 260),
+                            opacity: _expanded ? 0 : 1,
                             child: IgnorePointer(
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
+                              child: Container(
+                                height: constraints.maxHeight * 0.46,
+                                alignment: Alignment.bottomCenter,
+                                decoration: const BoxDecoration(
                                   gradient: LinearGradient(
                                     begin: Alignment.topCenter,
                                     end: Alignment.bottomCenter,
-                                    colors: [Color(0x00000000), Color(0xCC000000)],
+                                    stops: [0.0, 0.5, 1.0],
+                                    colors: [Color(0x00000000), Color(0x99000000), Color(0xFF000000)],
                                   ),
                                 ),
                               ),
                             ),
                           ),
+
                           Positioned.fill(
                             child: GestureDetector(
                               behavior: HitTestBehavior.opaque,
                               onTapUp: (d) => _onTapUp(d, constraints.maxWidth),
                             ),
                           ),
+
                           if (urls.length > 1)
                             Positioned(
                               top: 10,
@@ -279,67 +272,67 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
                                 ),
                               ),
                             ),
+
+                          // اسم + بلوکِ اطلاعات روی گرادینت — با باز شدنِ شیت محو می‌شن.
                           Positioned(
                             left: 20,
                             right: 16,
                             bottom: 18,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
+                            child: IgnorePointer(
+                              ignoring: _expanded,
+                              child: AnimatedOpacity(
+                                duration: const Duration(milliseconds: 220),
+                                opacity: _expanded ? 0 : 1,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Expanded(
-                                      child: IgnorePointer(
-                                        child: Text('${widget.profile.name}  ${widget.profile.age}',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                                color: Colors.white, fontSize: 30, fontWeight: FontWeight.w700)),
-                                      ),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: IgnorePointer(
+                                            child: Text('${widget.profile.name}  ${widget.profile.age}',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                    color: Colors.white, fontSize: 30, fontWeight: FontWeight.w700)),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        _OpenProfileButton(expanded: _expanded, onTap: _toggleExpanded),
+                                      ],
                                     ),
-                                    const SizedBox(width: 8),
-                                    _OpenProfileButton(onTap: _scrollToDetails),
+                                    if (block != null) ...[
+                                      const SizedBox(height: 8),
+                                      IgnorePointer(child: _buildBlock(block)),
+                                    ],
                                   ],
                                 ),
-                                if (block != null) ...[
-                                  const SizedBox(height: 8),
-                                  IgnorePointer(child: _buildBlock(block)),
-                                ],
-                              ],
+                              ),
+                            ),
+                          ),
+
+                          // شیتِ اطلاعاتِ کامل — از پایین، روی عکس میاد بالا.
+                          AnimatedPositioned(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOutCubic,
+                            left: 0,
+                            right: 0,
+                            height: sheetHeight,
+                            bottom: _expanded ? 0 : -sheetHeight,
+                            child: _ProfileInfoSheet(
+                              name: widget.profile.name,
+                              age: widget.profile.age,
+                              profile: widget.profile,
+                              promptTextMap: widget.promptTextMap,
+                              interestLabelMap: widget.interestLabelMap,
+                              onCollapse: _toggleExpanded,
                             ),
                           ),
                         ],
                       );
                     }),
                   ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text('${widget.profile.name}، ${widget.profile.age}',
-                          style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800)),
-                    ),
-                    GestureDetector(
-                      onTap: _scrollToTop,
-                      child: const CircleAvatar(
-                        radius: 16,
-                        backgroundColor: Colors.white,
-                        child: Icon(Icons.keyboard_arrow_down, size: 20, color: Colors.black),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-                child: MyProfileDetailSheet(
-                  profile: widget.profile,
-                  promptTextMap: widget.promptTextMap,
-                  interestLabelMap: widget.interestLabelMap,
                 ),
               ),
             ],
@@ -351,8 +344,66 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
 }
 
 // -----------------------------------------------------------------------
-// اجزای کوچیک — عیناً کپی از SwipeProfileCard برای یکدست بودن ظاهر.
+// اجزای کوچیک
 // -----------------------------------------------------------------------
+
+/// شیتِ اطلاعاتِ کامل که با زدنِ فلش، از پایینِ باکسِ عکس میاد بالا.
+/// هدرش (اسم + فلشِ روبه‌پایین برای بستن) ثابته؛ بدنه اسکرول می‌خوره.
+class _ProfileInfoSheet extends StatelessWidget {
+  final String name;
+  final int age;
+  final MyProfile profile;
+  final Map<String, String> promptTextMap;
+  final Map<String, String> interestLabelMap;
+  final VoidCallback onCollapse;
+
+  const _ProfileInfoSheet({
+    required this.name,
+    required this.age,
+    required this.profile,
+    required this.promptTextMap,
+    required this.interestLabelMap,
+    required this.onCollapse,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: AppDark.cardAlt,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text('$name، $age',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800)),
+                ),
+                _CollapseButton(onTap: onCollapse),
+              ],
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
+              child: MyProfileDetailSheet(
+                profile: profile,
+                promptTextMap: promptTextMap,
+                interestLabelMap: interestLabelMap,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _BlockHeader extends StatelessWidget {
   final IconData icon;
@@ -400,24 +451,48 @@ class _Chip extends StatelessWidget {
   }
 }
 
-/// دکمه‌ی فلش — عیناً همون _OpenProfileButton تو کارت‌های سواپ.
+/// دکمه‌ی فلشِ روی عکس — دایره‌ی نیمه‌شفاف، عیناً کارت‌های سواپ؛ با تپ،
+/// خودش ۱۸۰ درجه می‌چرخه (رو به پایین) و همزمان کل گروه (خودش هم) محو
+/// می‌شه، چون کنترلِ باز/بسته‌شدن از این به بعد دستِ دکمه‌ی داخل شیته.
 class _OpenProfileButton extends StatelessWidget {
+  final bool expanded;
   final VoidCallback onTap;
-  const _OpenProfileButton({required this.onTap});
+  const _OpenProfileButton({required this.expanded, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onTap();
-      },
+      onTap: onTap,
       child: Container(
         width: 32,
         height: 32,
         decoration: const BoxDecoration(color: Color(0x33FFFFFF), shape: BoxShape.circle),
-        child: const Icon(Icons.arrow_upward, size: 18, color: Colors.white),
+        child: AnimatedRotation(
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+          turns: expanded ? 0.5 : 0,
+          child: const Icon(Icons.arrow_upward, size: 18, color: Colors.white),
+        ),
+      ),
+    );
+  }
+}
+
+/// دکمه‌ی بستنِ شیت — دایره‌ی سفیدِ توپر با فلشِ رو‌به‌پایینِ مشکی.
+class _CollapseButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _CollapseButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: const CircleAvatar(
+        radius: 16,
+        backgroundColor: Colors.white,
+        child: Icon(Icons.keyboard_arrow_down, size: 20, color: Colors.black),
       ),
     );
   }
