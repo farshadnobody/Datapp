@@ -22,6 +22,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   static const int _swipeTab = 0;
+  static const int _likesTab = 2;
   static const int _chatTab = 3;
 
   int _index = _swipeTab;
@@ -90,7 +91,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       foregroundColor: Colors.white,
                     ),
                   ),
-                  child: MatchesScreen(key: ValueKey<int>(_chatRefresh)),
+                  child: MatchesScreen(
+                    key: ValueKey<int>(_chatRefresh),
+                    onOpenLikes: () => _select(_likesTab),
+                  ),
                 ),
               ),
               _lazy(4, () => const ProfileHomeScreen()),

@@ -365,6 +365,94 @@ class ApiClient {
     return list.map((e) => MatchSummary.fromJson(e)).toList();
   }
 
+  // ------------------------------------------------------------------
+  // صفحه‌ی چت (لیست مکالمه‌ها) — اندپوینت‌های زیر هنوز تو بک‌اند نیستن؛
+  // فرانت کامل بر همین قرارداد ساخته شده، فقط باید بعداً پیاده بشن.
+  // ------------------------------------------------------------------
+
+  /// GET /api/conversations
+  /// جواب: لیستی از متچ‌ها به‌همراه آخرین پیام (اگه پیامی رد و بدل شده).
+  /// شکل هر آیتم دقیقاً همون فیلدهای ConversationSummary.fromJson.
+  static Future<List<ConversationSummary>> fetchConversations() async {
+    final response = await _get('/api/conversations', authenticated: true);
+    if (response.statusCode != 200) {
+      final data = jsonDecode(response.body);
+      throw ApiException(data['error'] ?? 'unknown_error');
+    }
+    final list = jsonDecode(response.body) as List;
+    return list.map((e) => ConversationSummary.fromJson(e)).toList();
+  }
+
+  /// GET /api/likes/summary
+  /// جواب: {"count": N, "preview_photo_urls": [...]} — عکس‌های پیش‌نمایش
+  /// باید از سمت بک‌اند محوشده/سانسورشده بیان (چون هنوز متچ نشدن).
+  static Future<LikesSummary> fetchLikesSummary() async {
+    final response = await _get('/api/likes/summary', authenticated: true);
+    if (response.statusCode != 200) {
+      final data = jsonDecode(response.body);
+      throw ApiException(data['error'] ?? 'unknown_error');
+    }
+    return LikesSummary.fromJson(jsonDecode(response.body));
+  }
+
+  /// POST /api/matches/unmatch  {public_id}
+  static Future<void> unmatch(String publicId) async {
+    final response =
+        await _post('/api/matches/unmatch', {'public_id': publicId}, authenticated: true);
+    if (response.statusCode != 200) {
+      final data = jsonDecode(response.body);
+      throw ApiException(data['error'] ?? 'unknown_error');
+    }
+  }
+
+  /// POST /api/matches/block  {public_id}
+  static Future<void> blockUser(String publicId) async {
+    final response =
+        await _post('/api/matches/block', {'public_id': publicId}, authenticated: true);
+    if (response.statusCode != 200) {
+      final data = jsonDecode(response.body);
+      throw ApiException(data['error'] ?? 'unknown_error');
+    }
+  }
+
+  /// POST /api/matches/report  {public_id, reason, details?}
+  static Future<void> reportUser(String publicId, {required String reason, String? details}) async {
+    final response = await _post(
+        '/api/matches/report',
+        {
+          'public_id': publicId,
+          'reason': reason,
+          if (details != null && details.trim().isNotEmpty) 'details': details.trim(),
+        },
+        authenticated: true);
+    if (response.statusCode != 200) {
+      final data = jsonDecode(response.body);
+      throw ApiException(data['error'] ?? 'unknown_error');
+    }
+  }
+
+  /// POST /api/matches/feedback  {public_id, feedback}
+  static Future<void> sendMatchFeedback(String publicId, String feedback) async {
+    final response = await _post(
+        '/api/matches/feedback', {'public_id': publicId, 'feedback': feedback},
+        authenticated: true);
+    if (response.statusCode != 200) {
+      final data = jsonDecode(response.body);
+      throw ApiException(data['error'] ?? 'unknown_error');
+    }
+  }
+
+  /// POST /api/messages/like  {id, liked}
+  static Future<void> toggleMessageLike(int messageId, bool liked) async {
+    final response = await _post(
+        '/api/messages/like', {'id': messageId, 'liked': liked},
+        authenticated: true);
+    if (response.statusCode != 200) {
+      final data = jsonDecode(response.body);
+      throw ApiException(data['error'] ?? 'unknown_error');
+    }
+  }
+
   static Future<List<ChatMessage>> fetchMessages(String withPublicId) async {
     final uri = Uri.parse('$backendBaseUrl/api/messages/history')
         .replace(queryParameters: {'with': withPublicId});
