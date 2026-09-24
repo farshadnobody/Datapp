@@ -73,7 +73,8 @@ class _MatchProfileScreenState extends State<MatchProfileScreen> {
   void _onTapUp(TapUpDetails d, double width) {
     final count = _photoUrls.length;
     if (count <= 1) return;
-    final goNext = d.localPosition.dx >= width / 2;
+    // سمتِ راستِ عکس = قبلی، سمتِ چپ = بعدی (هم‌جهت با آر‌تی‌الِ صفحه).
+    final goNext = d.localPosition.dx < width / 2;
     final next = _photoIndex + (goNext ? 1 : -1);
     if (next < 0 || next >= count) {
       HapticFeedback.selectionClick();

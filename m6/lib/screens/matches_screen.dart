@@ -55,18 +55,34 @@ class _MatchesScreenState extends State<MatchesScreen> {
       try {
         conversations = await ApiClient.fetchConversations();
       } catch (_) {
-        // اگه /api/conversations هم هنوز نیست، حداقل از لیستِ خامِ
-        // متچ‌ها (که همیشه بوده) به‌عنوان جایگزین استفاده کن — بدون
-        // پیام/وضعیتِ نوبت، ولی صفحه خالی نمی‌مونه.
+        // اگه /api/conversations هنوز نیست: از لیستِ خامِ متچ‌ها (که همیشه
+        // بوده) شروع می‌کنیم، ولی برای هر متچ آخرین پیامش رو هم جدا
+        // می‌گیریم (با /api/messages که از قبل کار می‌کرد) تا واقعاً
+        // معلوم بشه کدوم متچ پیام داره و آخرین پیامش چی بوده — وگرنه هیچ
+        // متچی هیچ‌وقت زیرِ «پیام‌ها» نمی‌رفت.
         final raw = await ApiClient.fetchMatches();
-        conversations = raw
-            .map((m) => ConversationSummary(
-                  publicId: m.publicId,
-                  name: m.name,
-                  photoUrl: m.photoUrl,
-                  matchedAt: m.matchedAt,
-                ))
-            .toList();
+        conversations = await Future.wait(raw.map((m) async {
+          try {
+            final messages = await ApiClient.fetchMessages(m.publicId);
+            final last = messages.isEmpty ? null : messages.last;
+            return ConversationSummary(
+              publicId: m.publicId,
+              name: m.name,
+              photoUrl: m.photoUrl,
+              matchedAt: m.matchedAt,
+              lastMessageBody: last?.body,
+              lastMessageAt: last?.sentAt,
+              lastMessageFromMe: last?.fromMe ?? false,
+            );
+          } catch (_) {
+            return ConversationSummary(
+              publicId: m.publicId,
+              name: m.name,
+              photoUrl: m.photoUrl,
+              matchedAt: m.matchedAt,
+            );
+          }
+        }));
       }
       try {
         likes = await ApiClient.fetchLikesSummary();
@@ -93,9 +109,11 @@ class _MatchesScreenState extends State<MatchesScreen> {
 
   Future<void> _openChat(ConversationSummary c) async {
     HapticFeedback.lightImpact();
-    final result = await Navigator.of(context)
+    await Navigator.of(context)
         .push<bool>(MaterialPageRoute(builder: (_) => ChatScreen(match: _toMatchSummary(c))));
-    if (result == true) _load(); // Unmatch/Block شده بود — رفرش کن.
+    // همیشه رفرش کن — ممکنه پیامی رد و بدل شده باشه (یا Unmatch/Block شده
+    // باشه) که باید تو لیست منعکس بشه.
+    _load();
   }
 
   List<ConversationSummary> get _filtered {
