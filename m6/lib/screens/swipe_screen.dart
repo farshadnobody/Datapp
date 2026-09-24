@@ -65,6 +65,10 @@ class _SwipeScreenState extends State<SwipeScreen> {
 
   int _tab = 0; // 0 = برای تو، 1 = نزدیک
 
+  /// publicId کارتی که اطلاعاتش باز شده (اسکرولِ داخلِ کارت فعاله). تا وقتی
+  /// باز مونده، کشیدنِ کارت خاموشه تا با اسکرول تداخل نکنه.
+  String? _expandedId;
+
   int _remaining = SwipeOnboarding.remaining;
   bool get _onboarding => _remaining > 0;
 
@@ -183,6 +187,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
     _generation++;
     _loadingMore = false;
     setState(() {
+      _expandedId = null;
       _stack = [];
       _error = null;
     });
@@ -239,6 +244,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
     final direction = _dirName(dir);
     _excluded.add(c.publicId);
     setState(() {
+      _expandedId = null;
       _stack = _stack.where((x) => !identical(x, c)).toList();
       _history.add(_SwipeRecord(c, dir));
       if (_history.length > 10) _history.removeAt(0);
@@ -279,7 +285,10 @@ class _SwipeScreenState extends State<SwipeScreen> {
     final last = _history.removeLast();
     _excluded.remove(last.candidate.publicId);
     _deck.prepareRewind(last.direction);
-    setState(() => _stack = [last.candidate, ..._stack]);
+    setState(() {
+      _expandedId = null;
+      _stack = [last.candidate, ..._stack];
+    });
     // لایک/سوپرلایکِ ثبت‌شده رو برمی‌داریم؛ برای «رد» endpoint جدایی نیست.
     if (last.direction != SwipeDirection.left) {
       ApiClient.removeLike(last.candidate.publicId).catchError((_) {});
@@ -704,6 +713,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
           items: _stack,
           controller: _deck,
           superLikeEnabled: !_onboarding,
+          swipeEnabled: _stack.first.publicId != _expandedId,
           canSwipe: _canSwipe,
           onBlocked: _onBlocked,
           onSwiped: _onSwiped,
@@ -711,8 +721,12 @@ class _SwipeScreenState extends State<SwipeScreen> {
             key: ValueKey(c.publicId),
             candidate: c,
             interestLabels: _interestLabelMap,
+            promptTextMap: _promptTextMap,
             myInterests: _myInterests,
-            onOpenProfile: () => _openDetail(c),
+            onExpandedChanged: (open) {
+              if (!mounted) return;
+              setState(() => _expandedId = open ? c.publicId : (_expandedId == c.publicId ? null : _expandedId));
+            },
           ),
         ),
         Positioned(

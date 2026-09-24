@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../api_client.dart';
 import '../models/profile_models.dart';
 import '../onboarding/onboarding_data.dart';
+import '../widgets/discovery_profile_detail_sheet.dart';
 import 'swipe_style.dart';
 
 /// کارت پروفایل سبک تیندر.
@@ -11,24 +12,35 @@ import 'swipe_style.dart';
 /// - پایین کارت همیشه اسم و سن هست؛ زیرش یه «بلوک اطلاعات» که با عوض شدن
 ///   عکس عوض می‌شه (بیو ← دنبال چی می‌گرده ← علاقه‌مندی‌ها ← مشخصات و سبک
 ///   زندگی)، فقط بلوک‌هایی که داده‌شون هست.
-/// - دکمه‌ی فلش کنار اسم → صفحه‌ی جزئیات.
+/// - فلشِ هم‌ردیفِ اسم (مثل صفحه‌ی Preview Profile): اسکرولِ کارت اولش قفله و
+///   اطلاعاتِ کامل مخفیه. با تپِ فلش قفل باز می‌شه، یه اسکرولِ کوچیک (هینت)
+///   کارت رو یه‌کم هل می‌ده بالا و اطلاعاتِ چسبیده به کارت رو نشون می‌ده؛ از
+///   اونجا به بعد کاربر آزادانه اسکرول می‌کنه. تپِ دوباره‌ی فلش (یا برگشتنِ
+///   دستی به بالا) برمی‌گردونه به حالتِ اول، و این چرخه هر چندبار تکرار می‌شه.
 class SwipeProfileCard extends StatefulWidget {
   final DiscoveryCandidate candidate;
 
   /// id → برچسب علاقه‌مندی‌ها (از /api/profile/options).
   final Map<String, String> interestLabels;
 
+  /// id → متنِ سؤالِ پرامپت‌ها (برای نمایشِ جوابِ پرامپت‌ها زیرِ کارت).
+  final Map<String, String> promptTextMap;
+
   /// علاقه‌مندی‌های خود کاربر؛ مشترک‌ها صورتی نشون داده می‌شن.
   final Set<String> myInterests;
 
-  final VoidCallback onOpenProfile;
+  /// وقتی اسکرولِ کارت باز (true) یا دوباره قفل (false) می‌شه صدا زده می‌شه؛
+  /// Deck از این برای خاموش/روشن کردنِ کشیدنِ کارت استفاده می‌کنه تا کشیدنِ
+  /// عمودی با اسکرولِ اطلاعات تداخل نکنه.
+  final ValueChanged<bool>? onExpandedChanged;
 
   const SwipeProfileCard({
     super.key,
     required this.candidate,
-    required this.onOpenProfile,
     this.interestLabels = const {},
+    this.promptTextMap = const {},
     this.myInterests = const {},
+    this.onExpandedChanged,
   });
 
   @override
@@ -39,6 +51,113 @@ enum _Block { bio, lookingFor, interests, basics }
 
 class _SwipeProfileCardState extends State<SwipeProfileCard> {
   int _index = 0;
+
+  final ScrollController _scrollController = ScrollController();
+
+  /// تا فلش نخوره، اسکرولِ دستی قفله.
+  bool _unlocked = false;
+
+  /// فلش رو به پایینه (اطلاعات باز شده). فقط برای چرخشِ فلش و تصمیمِ تپِ بعدی.
+  bool _expanded = false;
+
+  /// وقتی انیمیشنِ باز/بسته شدن در جریانه، لیسنرِ اسکرول دخالت نمی‌کنه.
+  bool _animating = false;
+
+  /// شماره‌ی آخرین انیمیشن — تا تپِ سریع/انیمیشنِ قدیمی، حالتِ جدید رو خراب نکنه.
+  int _animToken = 0;
+
+  /// اسکرولِ هینتِ اولیه وقتی فلش می‌خوره. دکمه‌های پایین روی کارت میفتن، پس
+  /// ارتفاعشون (دکمه‌ی بزرگ + فاصله‌ش تا پایین) هم اضافه شده تا همون مقدارِ
+  /// اطلاعاتِ Preview، بالای دکمه‌ها دیده بشه.
+  static const double _peekNudge = 140 + SwipeMetrics.bigButton + SwipeMetrics.buttonsBottom;
+
+  /// چند پیکسل اسکرول تا اطلاعات کامل ظاهر بشه (قبلش محو/مخفیه).
+  static const double _revealDistance = 32;
+
+  /// فضای خالیِ آخرِ اسکرول، تا آخرین باکس زیرِ دکمه‌های پایین گیر نکنه.
+  static const double _bottomPad = SwipeMetrics.bigButton + SwipeMetrics.buttonsBottom + 24;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  double get _offset => _scrollController.hasClients ? _scrollController.offset : 0.0;
+
+  /// شفافیتِ گرادینت + اسم/سن/متنِ روی کارت: با باز شدنِ اطلاعات محو می‌شن و با
+  /// برگشتِ اطلاعات به حالتِ اول، دوباره ظاهر می‌شن.
+  double get _overlayOpacity => 1.0 - (_offset / _revealDistance).clamp(0.0, 1.0).toDouble();
+
+  Widget _fade(Widget child) => AnimatedBuilder(
+        animation: _scrollController,
+        child: child,
+        builder: (context, child) => Opacity(opacity: _overlayOpacity, child: child),
+      );
+
+  /// اگه کاربر خودش دستی برگشت بالا، فلش هم برمی‌گرده به حالتِ اول.
+  void _onScroll() {
+    if (_expanded && !_animating && _offset <= 0) {
+      setState(() {
+        _expanded = false;
+        _unlocked = false;
+      });
+      widget.onExpandedChanged?.call(false);
+    }
+  }
+
+  void _onArrowTap() {
+    HapticFeedback.lightImpact();
+    // اگه باز شده و هنوز پایین‌تریم → ببند؛ در غیر این صورت → باز کن.
+    if (_expanded && _offset >= 8) {
+      _collapse();
+    } else {
+      _expand();
+    }
+  }
+
+  Future<void> _expand() async {
+    final token = ++_animToken;
+    setState(() {
+      _unlocked = true;
+      _expanded = true;
+    });
+    widget.onExpandedChanged?.call(true);
+    _animating = true;
+    // یه فریم صبر می‌کنیم تا فیزیکِ اسکرولِ باز شده اعمال بشه.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || token != _animToken) return;
+    await _scrollController.animateTo(
+      _peekNudge,
+      duration: const Duration(milliseconds: 380),
+      curve: Curves.easeOutCubic,
+    );
+    if (!mounted || token != _animToken) return;
+    _animating = false;
+  }
+
+  Future<void> _collapse() async {
+    final token = ++_animToken;
+    setState(() => _expanded = false);
+    _animating = true;
+    await _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 380),
+      curve: Curves.easeOutCubic,
+    );
+    if (!mounted || token != _animToken) return;
+    _animating = false;
+    // برگشت به حالتِ اول: اسکرول دوباره قفل، تا تپِ بعدیِ فلش دوباره باز کنه.
+    setState(() => _unlocked = false);
+    widget.onExpandedChanged?.call(false);
+  }
 
   List<String> get _photoUrls => widget.candidate.photos
       .map((p) => '$backendBaseUrl${p.url}')
@@ -70,43 +189,83 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> {
   @override
   Widget build(BuildContext context) {
     final urls = _photoUrls;
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(
-        bottom: Radius.circular(SwipeMetrics.cardRadius),
-      ),
-      child: LayoutBuilder(builder: (context, constraints) {
-        return ColoredBox(
-          color: SwipeColors.cardBase,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              _buildPhoto(urls),
-              // گرادیانت بالا (زیر نقطه‌ها/بنر)
-              const Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                height: 96,
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Color(0xB3000000), Color(0x00000000)],
-                      ),
+    // خودِ کارت (نه یه صفحه‌ی جدا) اسکرول می‌شه: کارت به اندازه‌ی کلِ فضای Deck
+    // اولین آیتمِ یه Column‌ـه و اطلاعاتِ کامل درست زیرش. تا فلش نخوره اسکرول
+    // قفله و اطلاعات هم مخفیه.
+    return LayoutBuilder(builder: (context, viewport) {
+      return SingleChildScrollView(
+        controller: _scrollController,
+        physics: _unlocked ? const ClampingScrollPhysics() : const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: _bottomPad),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              height: viewport.maxHeight,
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(SwipeMetrics.cardRadius),
+                ),
+                child: _buildCard(urls),
+              ),
+            ),
+            // اطلاعات درست زیرِ کارت؛ تا وقتی اسکرول نشده مخفیه و با اسکرول
+            // محو→آشکار می‌شه.
+            const SizedBox(height: 12),
+            AnimatedBuilder(
+              animation: _scrollController,
+              child: DiscoveryProfileDetailSheet(
+                candidate: widget.candidate,
+                promptTextMap: widget.promptTextMap,
+                interestLabelMap: widget.interestLabels,
+              ),
+              builder: (context, child) => Opacity(
+                opacity: (_offset / _revealDistance).clamp(0.0, 1.0).toDouble(),
+                child: child,
+              ),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  Widget _buildCard(List<String> urls) {
+    return LayoutBuilder(builder: (context, constraints) {
+      return ColoredBox(
+        color: SwipeColors.cardBase,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _buildPhoto(urls),
+            // گرادیانت بالا (زیر نقطه‌ها/بنر)
+            const Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 96,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0xB3000000), Color(0x00000000)],
                     ),
                   ),
                 ),
               ),
-              // گرادیانت پایین — تا رنگ ته کارت (زیر دکمه‌ها) ادامه داره
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                height: constraints.maxHeight * 0.6,
-                child: const IgnorePointer(
-                  child: DecoratedBox(
+            ),
+            // گرادیانت پایین — تا رنگ ته کارت (زیر دکمه‌ها) ادامه داره؛ با باز
+            // شدنِ اطلاعات محو می‌شه.
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: constraints.maxHeight * 0.6,
+              child: IgnorePointer(
+                child: _fade(
+                  const DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
@@ -122,35 +281,35 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> {
                   ),
                 ),
               ),
-              // ناحیه‌ی تپ برای عوض کردن عکس
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapUp: (d) => _onTapUp(d, constraints.maxWidth),
-                ),
+            ),
+            // ناحیه‌ی تپ برای عوض کردن عکس
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: (d) => _onTapUp(d, constraints.maxWidth),
               ),
-              // نقطه‌های عکس‌ها
-              if (urls.length > 1)
-                Positioned(
-                  top: 10,
-                  left: 0,
-                  right: 0,
-                  child: IgnorePointer(
-                    child: Center(child: _PhotoDots(count: urls.length, index: _index)),
-                  ),
-                ),
-              // اطلاعات پایین کارت
+            ),
+            // نقطه‌های عکس‌ها
+            if (urls.length > 1)
               Positioned(
-                left: SwipeMetrics.infoSide,
-                right: SwipeMetrics.infoSide,
-                bottom: SwipeMetrics.infoBottom,
-                child: _buildInfo(),
+                top: 10,
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  child: Center(child: _PhotoDots(count: urls.length, index: _index)),
+                ),
               ),
-            ],
-          ),
-        );
-      }),
-    );
+            // اطلاعات پایین کارت
+            Positioned(
+              left: SwipeMetrics.infoSide,
+              right: SwipeMetrics.infoSide,
+              bottom: SwipeMetrics.infoBottom,
+              child: _buildInfo(),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   Widget _buildPhoto(List<String> urls) {
@@ -193,13 +352,15 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (_pillLabel(c.activityStatus) != null)
-          IgnorePointer(child: _StatusPill(status: c.activityStatus!)),
+          IgnorePointer(child: _fade(_StatusPill(status: c.activityStatus!))),
         const SizedBox(height: 8),
+        // فلش هم‌ردیفِ اسم (وسط‌چینِ عمودی)؛ خودش محو نمی‌شه، چون باید برای
+        // بستنِ اطلاعات هم قابلِ تپ بمونه.
         Row(
           children: [
             Expanded(
               child: IgnorePointer(
-                child: Text.rich(
+                child: _fade(Text.rich(
                   TextSpan(children: [
                     TextSpan(
                       text: c.name,
@@ -220,16 +381,16 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> {
                     fontSize: 30,
                     height: 1.2,
                   ),
-                ),
+                )),
               ),
             ),
             const SizedBox(width: 8),
-            _OpenProfileButton(onTap: widget.onOpenProfile),
+            _OpenProfileButton(down: _expanded, onTap: _onArrowTap),
           ],
         ),
         if (block != null) ...[
           const SizedBox(height: 8),
-          IgnorePointer(child: _buildBlock(block)),
+          IgnorePointer(child: _fade(_buildBlock(block))),
         ],
       ],
     );
@@ -538,27 +699,52 @@ class _PhotoDots extends StatelessWidget {
   }
 }
 
+/// دکمه‌ی فلشِ کنارِ اسم — دایره‌ی مشکی با شورونِ ضخیم؛ با تپ ۱۸۰ درجه می‌چرخه.
 class _OpenProfileButton extends StatelessWidget {
+  final bool down;
   final VoidCallback onTap;
-  const _OpenProfileButton({required this.onTap});
+  const _OpenProfileButton({required this.down, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onTap();
-      },
+      onTap: onTap,
       child: Container(
-        width: 32,
-        height: 32,
-        decoration: const BoxDecoration(
-          color: Color(0x33FFFFFF),
-          shape: BoxShape.circle,
+        width: 36,
+        height: 36,
+        decoration: const BoxDecoration(color: Colors.black, shape: BoxShape.circle),
+        alignment: Alignment.center,
+        child: AnimatedRotation(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          turns: down ? 0.5 : 0,
+          child: const SizedBox(width: 18, height: 18, child: CustomPaint(painter: _ChevronPainter())),
         ),
-        child: const Icon(Icons.arrow_upward, size: 18, color: Colors.white),
       ),
     );
   }
+}
+
+/// شورونِ رو به بالا با خطِ ضخیم و سرِ گرد.
+class _ChevronPainter extends CustomPainter {
+  const _ChevronPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final path = Path()
+      ..moveTo(size.width * 0.1, size.height * 0.65)
+      ..lineTo(size.width * 0.5, size.height * 0.3)
+      ..lineTo(size.width * 0.9, size.height * 0.65);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

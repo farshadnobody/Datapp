@@ -62,6 +62,11 @@ class SwipeDeck<T> extends StatefulWidget {
   /// اگه false باشه کشیدن به بالا (سوپرلایک) کار نمی‌کنه (حالت ۱).
   final bool superLikeEnabled;
 
+  /// اگه false باشه کشیدنِ کارت (لایک/رد/سوپرلایک) کاملاً غیرفعاله و ژست‌ها
+  /// به خودِ کارت می‌رسن. وقتی اطلاعاتِ کارت باز شده (کارت داخلش اسکرول
+  /// می‌شه) این false می‌شه تا کشیدنِ عمودی با اسکرول تداخل نکنه.
+  final bool swipeEnabled;
+
   /// اگه false برگردونه، کارت به جای پرت شدن به جاش برمی‌گرده و `onBlocked`
   /// صدا زده می‌شه (مثلاً «قبلاً سوپرلایکش کردی»).
   final bool Function(T item, SwipeDirection direction)? canSwipe;
@@ -74,6 +79,7 @@ class SwipeDeck<T> extends StatefulWidget {
     required this.itemBuilder,
     required this.onSwiped,
     this.superLikeEnabled = false,
+    this.swipeEnabled = true,
     this.canSwipe,
     this.onBlocked,
   });
@@ -451,10 +457,10 @@ class _SwipeDeckState<T> extends State<SwipeDeck<T>>
           GestureDetector(
             key: const ValueKey('swipe_top'),
             behavior: HitTestBehavior.opaque,
-            onPanStart: _onPanStart,
-            onPanUpdate: _onPanUpdate,
-            onPanEnd: _onPanEnd,
-            onPanCancel: _onPanCancel,
+            onPanStart: widget.swipeEnabled ? _onPanStart : null,
+            onPanUpdate: widget.swipeEnabled ? _onPanUpdate : null,
+            onPanEnd: widget.swipeEnabled ? _onPanEnd : null,
+            onPanCancel: widget.swipeEnabled ? _onPanCancel : null,
             child: Transform.translate(
               offset: _pos,
               child: Transform.rotate(
