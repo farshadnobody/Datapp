@@ -83,6 +83,11 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
 
   double get _offset => _scrollController.hasClients ? _scrollController.offset : 0.0;
 
+  /// شفافیتِ گرادینت + اسم/سن/متنِ روی کارت: با باز شدنِ اطلاعات محو می‌شن و با
+  /// برگشتِ اطلاعات به حالتِ اول، دوباره ظاهر می‌شن (هم‌زمان و معکوسِ محوشدنِ
+  /// اطلاعاتِ زیرِ کارت، با همون _revealDistance).
+  double get _overlayOpacity => 1.0 - (_offset / _revealDistance).clamp(0.0, 1.0).toDouble();
+
   /// اگه کاربر خودش دستی برگشت بالا، فلش هم برمی‌گرده به حالتِ اول.
   void _onScroll() {
     if (_expanded && !_animating && _offset < 8) {
@@ -335,6 +340,8 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
                               block: block,
                               buildBlock: block == null ? null : () => _buildBlock(block),
                               infoBottom: _infoBottom,
+                              scroll: _scrollController,
+                              overlayOpacity: () => _overlayOpacity,
                               arrowDown: _expanded,
                               onArrowTap: _onArrowTap,
                               onTapUp: _onTapUp,
@@ -387,6 +394,8 @@ class _PhotoCard extends StatelessWidget {
   final _Block? block;
   final Widget Function()? buildBlock;
   final double infoBottom;
+  final Listenable scroll;
+  final double Function() overlayOpacity;
   final bool arrowDown;
   final VoidCallback onArrowTap;
   final void Function(TapUpDetails details, double width) onTapUp;
@@ -399,10 +408,18 @@ class _PhotoCard extends StatelessWidget {
     required this.block,
     required this.buildBlock,
     required this.infoBottom,
+    required this.scroll,
+    required this.overlayOpacity,
     required this.arrowDown,
     required this.onArrowTap,
     required this.onTapUp,
   });
+
+  Widget _fade(Widget child) => AnimatedBuilder(
+        animation: scroll,
+        child: child,
+        builder: (context, child) => Opacity(opacity: overlayOpacity(), child: child),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -457,14 +474,16 @@ class _PhotoCard extends StatelessWidget {
               right: 0,
               bottom: 0,
               height: constraints.maxHeight * 0.75,
-              child: const IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      stops: [0.0, 0.55, 0.85],
-                      colors: [Color(0x00101113), Color(0xB3101113), SwipeColors.cardBase],
+              child: IgnorePointer(
+                child: _fade(
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        stops: [0.0, 0.55, 0.85],
+                        colors: [Color(0x00101113), Color(0xB3101113), SwipeColors.cardBase],
+                      ),
                     ),
                   ),
                 ),
@@ -514,7 +533,7 @@ class _PhotoCard extends StatelessWidget {
                     children: [
                       Expanded(
                         child: IgnorePointer(
-                          child: Text.rich(
+                          child: _fade(Text.rich(
                             TextSpan(children: [
                               TextSpan(text: name, style: const TextStyle(fontWeight: FontWeight.w700)),
                               TextSpan(
@@ -525,7 +544,7 @@ class _PhotoCard extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(color: Colors.white, fontSize: 30, height: 1.2),
-                          ),
+                          )),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -535,7 +554,7 @@ class _PhotoCard extends StatelessWidget {
                   if (buildBlock != null) ...[
                     const SizedBox(height: 8),
                     // مثل سواپ: تپ روی بلوک به عوض شدنِ عکس می‌رسه.
-                    IgnorePointer(child: buildBlock!()),
+                    IgnorePointer(child: _fade(buildBlock!())),
                   ],
                 ],
               ),
