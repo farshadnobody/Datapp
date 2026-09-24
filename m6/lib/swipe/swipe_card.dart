@@ -4,6 +4,7 @@ import '../api_client.dart';
 import '../models/profile_models.dart';
 import '../onboarding/onboarding_data.dart';
 import '../widgets/discovery_profile_detail_sheet.dart';
+import '../widgets/profile_safety_actions.dart';
 import 'swipe_style.dart';
 
 /// کارت پروفایل سبک تیندر.
@@ -12,6 +13,11 @@ import 'swipe_style.dart';
 /// - پایین کارت همیشه اسم و سن هست؛ زیرش یه «بلوک اطلاعات» که با عوض شدن
 ///   عکس عوض می‌شه (بیو ← دنبال چی می‌گرده ← علاقه‌مندی‌ها ← مشخصات و سبک
 ///   زندگی)، فقط بلوک‌هایی که داده‌شون هست.
+/// - فلش و دکمه‌ی ارسال بعد از باز شدنِ اطلاعات «روی خودِ کارت» می‌چسبن و با
+///   اسکرولِ کارت حرکت می‌کنن (تو یه نقطه‌ی ثابتِ صفحه نمی‌مونن).
+/// - اسم/سن/متنِ روی کارت فقط دو حالت دارن: کامل نمایان یا کامل هاید (با هر
+///   اسکرولی هاید می‌شن؛ حالتِ نیمه‌هاید وجود نداره).
+/// - آخرِ اطلاعات: اشتراک‌گذاری / مسدودسازی / گزارش.
 /// - فلشِ هم‌ردیفِ اسم (مثل صفحه‌ی Preview Profile): اسکرولِ کارت اولش قفله و
 ///   اطلاعاتِ کامل مخفیه. با تپِ فلش قفل باز می‌شه، یه اسکرولِ کوچیک (هینت)
 ///   کارت رو یه‌کم هل می‌ده بالا و اطلاعاتِ چسبیده به کارت رو نشون می‌ده؛ از
@@ -37,6 +43,15 @@ class SwipeProfileCard extends StatefulWidget {
   /// سواپ با این کشیدنِ کارت رو خاموش/روشن می‌کنه تا با اسکرول تداخل نکنه.
   final ValueChanged<bool>? onSwipeLockChanged;
 
+  /// دکمه‌ی ارسال پیام که بعد از باز شدنِ اطلاعات روی خودِ کارت می‌شینه.
+  final VoidCallback? onSend;
+
+  /// فقط تو حالتِ کامل (بعد از اونبوردینگ) دکمه‌ی ارسال وجود داره.
+  final bool showSend;
+
+  /// بعد از مسدودسازیِ موفق صدا زده می‌شه؛ صفحه‌ی سواپ کارت رو از Deck برمی‌داره.
+  final VoidCallback? onBlocked;
+
   const SwipeProfileCard({
     super.key,
     required this.candidate,
@@ -45,6 +60,9 @@ class SwipeProfileCard extends StatefulWidget {
     this.myInterests = const {},
     this.onExpandedChanged,
     this.onSwipeLockChanged,
+    this.onSend,
+    this.showSend = true,
+    this.onBlocked,
   });
 
   @override
@@ -80,6 +98,9 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
   /// مرکزِ افقیِ دکمه‌ی واگرد تو نوارِ پایین (۵ اسلات با پدینگ ۷.۵).
   double get _rewindCenterX => 7.5 + (_w - 15) / 10;
 
+  /// مرکزِ افقیِ دکمه‌ی ارسال تو نوارِ پایین (اسلاتِ پنجم از ۵ تا).
+  double get _sendCenterX => 7.5 + (_w - 15) * 0.9;
+
   /// مرکزِ عمودیِ ردیفِ دکمه‌های پایین از بالای ناحیه.
   double get _buttonsCenterY => _h - SwipeMetrics.buttonsBottom - SwipeMetrics.bigButton / 2;
 
@@ -98,11 +119,15 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
   /// اسکرولِ هینتِ اولیه وقتی فلش می‌خوره (مثل Preview).
   static const double _peekNudge = 140;
 
-  /// چند پیکسل اسکرول تا اطلاعات کامل ظاهر بشه (قبلش محو/مخفیه).
-  static const double _revealDistance = 32;
+  /// بیشتر از این مقدار اسکرول = متنِ روی کارت هاید و اطلاعات نمایان.
+  static const double _hideThreshold = 1.0;
 
-  /// فضای خالیِ آخرِ اسکرول، تا آخرین باکس زیرِ فلش و دکمه‌ی ارسال گیر نکنه.
-  static const double _bottomPad = SwipeMetrics.bigButton + SwipeMetrics.buttonsBottom + 24;
+  /// فضای خالیِ آخرِ اسکرول (دکمه‌ها دیگه ثابت نیستن، پس فقط یه فاصله‌ی کم).
+  static const double _bottomPad = 28;
+
+  /// true = کاربر از بالای کارت اسکرول کرده: متنِ روی کارت کاملاً هاید و
+  /// اطلاعاتِ زیرِ کارت کاملاً نمایان. فقط دو حالت داره، نه حالتِ وسط.
+  bool _scrolled = false;
 
   @override
   void initState() {
@@ -120,19 +145,23 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
 
   double get _offset => _scrollController.hasClients ? _scrollController.offset : 0.0;
 
-  /// شفافیتِ گرادینت + اسم/سن/متنِ روی کارت: با باز شدنِ اطلاعات محو می‌شن و با
-  /// برگشتِ اطلاعات به حالتِ اول، دوباره ظاهر می‌شن.
-  double get _overlayOpacity => 1.0 - (_offset / _revealDistance).clamp(0.0, 1.0).toDouble();
-
-  Widget _fade(Widget child) => AnimatedBuilder(
-        animation: _scrollController,
+  /// گرادینت + اسم/سن/متنِ روی کارت: فقط بین «کامل نمایان» و «کامل هاید» جابه‌جا
+  /// می‌شن. به یه مقدارِ بولین وصلن (نه به مقدارِ اسکرول)، پس هیچ‌وقت نمی‌شه
+  /// نیمه‌هایدشون نگه داشت.
+  Widget _fade(Widget child) => AnimatedOpacity(
+        opacity: _scrolled ? 0 : 1,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
         child: child,
-        builder: (context, child) => Opacity(opacity: _overlayOpacity, child: child),
       );
 
   /// اگه کاربر خودش دستی برگشت بالا، فلش هم برمی‌گرده به حالتِ اول.
   void _onScroll() {
-    if (_expanded && !_animating && _offset <= 0) {
+    // وسطِ انیمیشنِ فلش، خودِ انیمیشن وضعیتِ هاید/نمایان رو تعیین می‌کنه.
+    if (_animating) return;
+    final scrolled = _offset > _hideThreshold;
+    if (scrolled != _scrolled) setState(() => _scrolled = scrolled);
+    if (_expanded && _offset <= 0) {
       setState(() {
         _expanded = false;
         _unlocked = false;
@@ -158,6 +187,7 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
     setState(() {
       _unlocked = true;
       _expanded = true;
+      _scrolled = true;
     });
     widget.onExpandedChanged?.call(true);
     widget.onSwipeLockChanged?.call(true);
@@ -177,7 +207,10 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
 
   Future<void> _collapse() async {
     final token = ++_animToken;
-    setState(() => _expanded = false);
+    setState(() {
+      _expanded = false;
+      _scrolled = false;
+    });
     widget.onExpandedChanged?.call(false);
     _arrowCtrl.reverse();
     _animating = true;
@@ -223,7 +256,8 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
   void _onTapUp(TapUpDetails d, double width) {
     final count = _photoUrls.length;
     if (count <= 1) return;
-    final goNext = d.localPosition.dx >= width / 2;
+    // صفحه راست‌به‌چپه (نقطه‌ها از راست شروع می‌شن): سمتِ راست = قبلی، چپ = بعدی.
+    final goNext = d.localPosition.dx < width / 2;
     final next = _index + (goNext ? 1 : -1);
     if (next < 0 || next >= count) {
       HapticFeedback.selectionClick();
@@ -260,28 +294,47 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // فلش و دکمه‌ی ارسال جزوِ همین بخش‌ان، پس با اسکرولِ کارت
+                  // حرکت می‌کنن.
                   SizedBox(
                     height: viewport.maxHeight,
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.vertical(
-                        bottom: Radius.circular(SwipeMetrics.cardRadius),
-                      ),
-                      child: _buildCard(urls),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Positioned.fill(
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.vertical(
+                              bottom: Radius.circular(SwipeMetrics.cardRadius),
+                            ),
+                            child: _buildCard(urls),
+                          ),
+                        ),
+                        _buildArrow(),
+                        if (widget.showSend) _buildSendButton(),
+                      ],
                     ),
                   ),
                   // اطلاعات درست زیرِ کارت؛ تا وقتی اسکرول نشده مخفیه و با
-                  // اسکرول محو→آشکار می‌شه.
+                  // اولین اسکرول کامل نمایان می‌شه.
                   const SizedBox(height: 12),
-                  AnimatedBuilder(
-                    animation: _scrollController,
-                    child: DiscoveryProfileDetailSheet(
-                      candidate: widget.candidate,
-                      promptTextMap: widget.promptTextMap,
-                      interestLabelMap: widget.interestLabels,
-                    ),
-                    builder: (context, child) => Opacity(
-                      opacity: (_offset / _revealDistance).clamp(0.0, 1.0).toDouble(),
-                      child: child,
+                  AnimatedOpacity(
+                    opacity: _scrolled ? 1 : 0,
+                    duration: const Duration(milliseconds: 150),
+                    curve: Curves.easeOut,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        DiscoveryProfileDetailSheet(
+                          candidate: widget.candidate,
+                          promptTextMap: widget.promptTextMap,
+                          interestLabelMap: widget.interestLabels,
+                        ),
+                        ProfileSafetyActions(
+                          publicId: widget.candidate.publicId,
+                          name: widget.candidate.name,
+                          onBlocked: widget.onBlocked,
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -292,13 +345,32 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
               child: child,
             ),
           ),
-          _buildArrow(),
         ],
       );
     });
   }
 
-  /// فلش — روی کارت شناوره (از اسکرول جداست). کنارِ اسم شروع می‌شه و با تپ،
+  /// دکمه‌ی ارسال — بعد از باز شدنِ اطلاعات روی کارت می‌شینه و با اسکرولِ کارت
+  /// حرکت می‌کنه. دقیقاً روی جای دکمه‌ی ارسالِ نوارِ پایینه؛ نوارِ پایین تا
+  /// وقتی کارت بازه اون رو هاید می‌کنه، پس هیچ‌وقت دوتا دیده نمی‌شن.
+  Widget _buildSendButton() {
+    const size = SwipeMetrics.smallButton;
+    return Positioned(
+      left: _sendCenterX - size / 2,
+      top: _buttonsCenterY - size / 2,
+      child: IgnorePointer(
+        ignoring: !_unlocked,
+        child: AnimatedOpacity(
+          opacity: _unlocked ? 1 : 0,
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+          child: _CardSendButton(size: size, onTap: widget.onSend),
+        ),
+      ),
+    );
+  }
+
+  /// فلش — روی خودِ کارت می‌چسبه (با اسکرول حرکت می‌کنه). کنارِ اسم شروع می‌شه و با تپ،
   /// با انیمیشن میاد پایین، هم‌ردیفِ دکمه‌ی ارسال، و هم‌اندازه‌ی اون (بزرگ) می‌شه.
   Widget _buildArrow() {
     final slotY = _slotCenterY;
@@ -789,6 +861,37 @@ class _PhotoDots extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// دکمه‌ی ارسالِ روی کارت — هم‌شکلِ دکمه‌ی ارسالِ نوارِ پایین.
+class _CardSendButton extends StatelessWidget {
+  final double size;
+  final VoidCallback? onTap;
+  const _CardSendButton({required this.size, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap == null
+          ? null
+          : () {
+              HapticFeedback.lightImpact();
+              onTap!();
+            },
+      child: Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: SwipeColors.buttonBg,
+          shape: BoxShape.circle,
+          border: Border.all(color: SwipeColors.buttonBorder, width: 1),
+        ),
+        child: const Icon(Icons.near_me, size: 22, color: SwipeColors.superLikeSoft),
+      ),
     );
   }
 }

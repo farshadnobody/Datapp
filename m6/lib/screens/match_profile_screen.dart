@@ -5,6 +5,7 @@ import '../models/match_models.dart';
 import '../models/profile_models.dart';
 import '../style/app_colors.dart';
 import '../widgets/discovery_profile_detail_sheet.dart';
+import '../widgets/profile_safety_actions.dart';
 
 /// پروفایلِ کاملِ طرفِ چت — از تپ روی عکس/اسمش تو هدرِ صفحه‌ی چت باز می‌شه.
 /// برخلاف «پیش‌نمایش پروفایلِ من» اینجا اسکرول قفل نیست و فلش صرفاً دکمه‌ی
@@ -149,7 +150,7 @@ class _MatchProfileScreenState extends State<MatchProfileScreen> {
       context: context,
       backgroundColor: AppDark.cardAlt,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (_) => _ReportReasonSheet(matchName: widget.match.name),
+      builder: (_) => ReportReasonSheet(matchName: widget.match.name),
     );
     if (reason == null || !mounted) return;
     try {
@@ -283,90 +284,14 @@ class _MatchProfileScreenState extends State<MatchProfileScreen> {
             interestLabelMap: _interestLabelMap,
           ),
           const SizedBox(height: 4),
-          _ActionButton(label: 'اشتراک‌گذاریِ پروفایلِ ${c.name}', onTap: _share),
+          ProfileActionButton(label: 'اشتراک‌گذاریِ پروفایلِ ${c.name}', onTap: _share),
           const SizedBox(height: 10),
-          _ActionButton(label: 'Unmatch', onTap: _unmatch),
+          ProfileActionButton(label: 'Unmatch', onTap: _unmatch),
           const SizedBox(height: 10),
-          _ActionButton(label: 'مسدودسازیِ ${c.name}', onTap: _block),
+          ProfileActionButton(label: 'مسدودسازیِ ${c.name}', onTap: _block),
           const SizedBox(height: 10),
-          _ActionButton(label: 'گزارشِ ${c.name}', onTap: _report, danger: true),
+          ProfileActionButton(label: 'گزارشِ ${c.name}', onTap: _report, danger: true),
         ],
-      ),
-    );
-  }
-}
-
-class _ActionButton extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-  final bool danger;
-  const _ActionButton({required this.label, required this.onTap, this.danger = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppDark.card,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () {
-          HapticFeedback.lightImpact();
-          onTap();
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: danger ? AppDark.warning : Colors.white,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ReportReasonSheet extends StatelessWidget {
-  final String matchName;
-  const _ReportReasonSheet({required this.matchName});
-
-  static const _reasons = [
-    ('inappropriate_content', 'محتوای نامناسب'),
-    ('fake_profile', 'پروفایل جعلی'),
-    ('harassment', 'آزار یا رفتار توهین‌آمیز'),
-    ('scam', 'کلاه‌برداری یا اسپم'),
-    ('underage', 'کمتر از سن مجاز به نظر می‌رسه'),
-    ('other', 'دلیل دیگه'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('گزارشِ $matchName',
-                style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 4),
-            const Text('چرا می‌خوای گزارشش کنی؟', style: TextStyle(color: AppDark.muted, fontSize: 14)),
-            const SizedBox(height: 12),
-            for (final r in _reasons)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(r.$2, style: const TextStyle(color: Colors.white, fontSize: 15)),
-                trailing: const Icon(Icons.chevron_left, color: AppDark.muted),
-                onTap: () => Navigator.of(context).pop(r.$1),
-              ),
-          ],
-        ),
       ),
     );
   }

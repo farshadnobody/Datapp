@@ -18,6 +18,10 @@ class SwipeActionBar extends StatelessWidget {
   /// true → ضربدر/ستاره/قلب/واگرد با محو و کوچیک شدن هاید می‌شن (دکمه‌ی ارسال
   /// سر جاش می‌مونه). وقتی اطلاعاتِ پروفایل باز شده استفاده می‌شه.
   final bool hideActions;
+
+  /// true → دکمه‌ی ارسال هم هاید می‌شه. وقتی کارت بازه، ارسال روی خودِ کارت
+  /// می‌شینه و با اسکرول حرکت می‌کنه، پس این‌جا نباید ثابت بمونه.
+  final bool hideSend;
   final VoidCallback onPass;
   final VoidCallback onLike;
   final VoidCallback onSuperLike;
@@ -30,6 +34,7 @@ class SwipeActionBar extends StatelessWidget {
     required this.extended,
     required this.canRewind,
     this.hideActions = false,
+    this.hideSend = false,
     required this.onPass,
     required this.onLike,
     required this.onSuperLike,
@@ -67,7 +72,7 @@ class SwipeActionBar extends StatelessWidget {
           slot(_hideable(_passButton(size: SwipeMetrics.bigButton, thick: true, dark: false))),
           slot(_hideable(_superLikeButton())),
           slot(_hideable(_likeButton(size: SwipeMetrics.bigButton, filledRest: true, dark: false))),
-          slot(_sendButton()),
+          slot(_hideable(_sendButton(), hidden: hideSend)),
         ],
       ),
     );
@@ -79,15 +84,16 @@ class SwipeActionBar extends StatelessWidget {
   /// اسکرول)، پس همیشه خودش کامل می‌شه و نمی‌شه نیمه‌هاید نگهش داشت.
   static const Duration _hideDuration = Duration(milliseconds: 120);
 
-  Widget _hideable(Widget child) {
+  Widget _hideable(Widget child, {bool? hidden}) {
+    final hide = hidden ?? hideActions;
     return IgnorePointer(
-      ignoring: hideActions,
+      ignoring: hide,
       child: AnimatedOpacity(
-        opacity: hideActions ? 0 : 1,
+        opacity: hide ? 0 : 1,
         duration: _hideDuration,
         curve: Curves.easeOut,
         child: AnimatedScale(
-          scale: hideActions ? 0.85 : 1,
+          scale: hide ? 0.85 : 1,
           duration: _hideDuration,
           curve: Curves.easeOut,
           child: child,

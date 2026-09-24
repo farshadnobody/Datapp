@@ -302,6 +302,18 @@ class _SwipeScreenState extends State<SwipeScreen> {
     }
   }
 
+  /// بعد از مسدودسازیِ موفق از تو کارت: کارت بدونِ ثبتِ سواپ از Deck برداشته می‌شه.
+  void _removeBlocked(DiscoveryCandidate c) {
+    _excluded.add(c.publicId);
+    setState(() {
+      _expandedId = null;
+      _lockedId = null;
+      _stack = _stack.where((x) => x.publicId != c.publicId).toList();
+    });
+    if (_stack.length < 5) _loadMore();
+    _precacheTop();
+  }
+
   void _toast(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -734,6 +746,9 @@ class _SwipeScreenState extends State<SwipeScreen> {
               if (!mounted) return;
               setState(() => _expandedId = open ? c.publicId : (_expandedId == c.publicId ? null : _expandedId));
             },
+            showSend: !_onboarding,
+            onSend: () => _toast('این قابلیت به‌زودی اضافه می‌شه.'),
+            onBlocked: () => _removeBlocked(c),
             onSwipeLockChanged: (locked) {
               if (!mounted) return;
               setState(() => _lockedId = locked ? c.publicId : (_lockedId == c.publicId ? null : _lockedId));
@@ -752,6 +767,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
               extended: !_onboarding,
               canRewind: _history.isNotEmpty,
               hideActions: _expandedId != null,
+              hideSend: _lockedId != null,
               onPass: () => _deck.swipe(SwipeDirection.left),
               onLike: () => _deck.swipe(SwipeDirection.right),
               onSuperLike: () => _deck.swipe(SwipeDirection.up),
