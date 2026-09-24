@@ -90,10 +90,11 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
 
   /// اگه کاربر خودش دستی برگشت بالا، فلش هم برمی‌گرده به حالتِ اول.
   void _onScroll() {
-    if (_expanded && !_animating && _offset < 8) {
+    // شرط از _offset < 8 به _offset <= 0 تغییر می‌کند
+    if (_expanded && !_animating && _offset <= 0) {
       setState(() {
         _expanded = false;
-        _unlocked = false; // این خط اضافه می‌شود تا اسکرول دوباره قفل شود
+        _unlocked = false;
       });
     }
   }
