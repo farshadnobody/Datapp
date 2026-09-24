@@ -151,7 +151,7 @@ class _BottomNav extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: 64,
+          height: SwipeMetrics.navHeight,
           child: Row(
             children: [
               for (int i = 0; i < _navItems.length; i++)

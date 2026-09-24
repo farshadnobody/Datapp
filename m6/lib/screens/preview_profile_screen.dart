@@ -4,17 +4,20 @@ import '../api_client.dart';
 import '../models/profile_models.dart';
 import '../onboarding/onboarding_data.dart';
 import '../style/app_colors.dart';
+import '../swipe/swipe_style.dart';
 import '../widgets/my_profile_detail_sheet.dart';
 
 /// «Preview Profile» — یه صفحه‌ی پیوسته (مثل اسکرولِ یه صفحه‌ی وب): کارتِ
-/// عکس با نسبتِ ثابت (کمی بلندتر از فریمِ استاندارد آپلود که ۴:۵ـه — عیناً
-/// اندازه‌ای که تو MatchProfileScreen هم استفاده شده) و بلافاصله زیرش،
-/// در همون فلوی عادی (نه روی هم!)، اطلاعاتِ کامل پروفایل.
+/// عکس **دقیقاً هم‌اندازه‌ی کارتِ صفحه‌ی سواپ** (تمام‌عرض، از زیرِ هدر تا جایی
+/// که تو سواپ نوارِ پایین شروع می‌شه، گوشه‌های پایینِ گرد) با اسم و سن تو
+/// همون محلِ کارتِ سواپ؛ و بلافاصله زیرش، در همون فلوی عادی، اطلاعاتِ کامل
+/// پروفایل.
 ///
-/// اسکرول اولش قفله. با تپِ فلشِ کنار اسم: قفل باز می‌شه و یه اسکرولِ کوچیک
-/// (هینت) می‌خوره که کارت رو یه‌کم هل بده بالا و نشون بده ادامه‌ش هست —
-/// از اونجا به بعد خودِ کاربر آزادانه اسکرول می‌کنه. تپِ دوباره‌ی همون فلش
-/// (وقتی برگرده بالا و دوباره دیده بشه) برمی‌گردونه به حالت اول.
+/// اسکرول اولش قفله و اطلاعات مخفیه. با تپِ فلشِ کنار اسم: قفل باز می‌شه و
+/// یه اسکرولِ کوچیک (هینت) می‌خوره که کارت رو یه‌کم هل بده بالا و اطلاعاتِ
+/// چسبیده به کارت رو نشون بده — از اونجا به بعد خودِ کاربر آزادانه اسکرول
+/// می‌کنه. تپِ دوباره‌ی فلش (یا برگشتنِ دستی به بالا) برمی‌گردونه به حالتِ
+/// اول، و این چرخه هر چندبار قابل تکراره.
 class PreviewProfileScreen extends StatefulWidget {
   final MyProfile profile;
   final Map<String, String> promptTextMap;
@@ -37,15 +40,44 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
   int _index = 0;
 
   final ScrollController _scrollController = ScrollController();
-  bool _unlocked = false; // تا فلش نخوره، اسکرولِ دستی قفله.
-  bool _arrowDown = false; // چرخشِ فلشِ روی عکس.
+
+  /// تا فلش نخوره، اسکرولِ دستی قفله.
+  bool _unlocked = false;
+
+  /// فلش رو به پایینه (اطلاعات باز شده). فقط برای چرخشِ فلش و تصمیمِ تپِ بعدی.
+  bool _expanded = false;
+
+  /// وقتی انیمیشنِ باز/بسته شدن در جریانه، لیسنرِ اسکرول دخالت نمی‌کنه.
+  bool _animating = false;
+
+  /// شماره‌ی آخرین انیمیشن — تا تپِ سریع/انیمیشنِ قدیمی، حالتِ جدید رو خراب نکنه.
+  int _animToken = 0;
 
   static const double _peekNudge = 140; // اسکرولِ هینتِ اولیه وقتی فلش می‌خوره.
 
+  /// چند پیکسل اسکرول تا اطلاعات کامل ظاهر بشه (قبلش محو/مخفیه).
+  static const double _revealDistance = 32;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  double get _offset => _scrollController.hasClients ? _scrollController.offset : 0.0;
+
+  /// اگه کاربر خودش دستی برگشت بالا، فلش هم برمی‌گرده به حالتِ اول.
+  void _onScroll() {
+    if (_expanded && !_animating && _offset < 8) {
+      setState(() => _expanded = false);
+    }
   }
 
   List<String> get _urls => widget.profile.photos.map((p) => '$backendBaseUrl${p.url}').toList();
@@ -133,22 +165,46 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
 
   void _onArrowTap() {
     HapticFeedback.lightImpact();
-    if (!_unlocked) {
-      setState(() {
-        _unlocked = true;
-        _arrowDown = true;
-      });
-      _scrollController.animateTo(_peekNudge,
-          duration: const Duration(milliseconds: 380), curve: Curves.easeOutCubic);
-    } else {
+    // اگه باز شده و هنوز پایین‌تریم → ببند؛ در غیر این صورت → باز کن.
+    if (_expanded && _offset >= 8) {
       _collapse();
+    } else {
+      _expand();
     }
   }
 
-  void _collapse() {
-    HapticFeedback.lightImpact();
-    _scrollController.animateTo(0, duration: const Duration(milliseconds: 380), curve: Curves.easeOutCubic);
-    setState(() => _arrowDown = false);
+  Future<void> _expand() async {
+    final token = ++_animToken;
+    setState(() {
+      _unlocked = true;
+      _expanded = true;
+    });
+    _animating = true;
+    // یه فریم صبر می‌کنیم تا فیزیکِ اسکرولِ باز شده اعمال بشه.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || token != _animToken) return;
+    await _scrollController.animateTo(
+      _peekNudge,
+      duration: const Duration(milliseconds: 380),
+      curve: Curves.easeOutCubic,
+    );
+    if (!mounted || token != _animToken) return;
+    _animating = false;
+  }
+
+  Future<void> _collapse() async {
+    final token = ++_animToken;
+    setState(() => _expanded = false);
+    _animating = true;
+    await _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 380),
+      curve: Curves.easeOutCubic,
+    );
+    if (!mounted || token != _animToken) return;
+    _animating = false;
+    // برگشت به حالتِ اول: اسکرول دوباره قفل، تا تپِ بعدیِ فلش دوباره باز کنه.
+    setState(() => _unlocked = false);
   }
 
   Widget _buildBlock(_Block block) {
@@ -211,6 +267,7 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
     final urls = _urls;
     final blocks = _blocks;
     final block = blocks.isEmpty ? null : blocks[_index % blocks.length];
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -220,64 +277,73 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
           bottom: false,
           child: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: Row(children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_forward, color: Colors.white),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  const Text('پیش‌نمایش پروفایل', style: TextStyle(color: Colors.white, fontSize: 17)),
-                ]),
+              // هم‌ارتفاعِ هدرِ صفحه‌ی سواپ، تا کارت دقیقاً از همون‌جا شروع بشه.
+              SizedBox(
+                height: SwipeMetrics.headerHeight,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_forward, color: Colors.white),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                    const Text('پیش‌نمایش پروفایل', style: TextStyle(color: Colors.white, fontSize: 17)),
+                  ]),
+                ),
               ),
               Expanded(
                 child: LayoutBuilder(builder: (context, viewport) {
-                  // ارتفاعِ واقعیِ قابل‌مشاهده (پدینگِ بالا/پایینِ اسکرول‌ویو رو
-                  // هم کم می‌کنیم) — تا بفهمیم زیرِ کارتِ عکس، قبل از اسکرول،
-                  // چقدر فضای خالی لازمه که هیچی از اطلاعاتِ پروفایل دیده نشه.
-                  const verticalPadding = 4.0 + 28.0;
-                  final availableHeight = viewport.maxHeight - verticalPadding;
+                  // تو سواپ، کارت بین هدر و نوارِ پایین (۶۴ + safe-area) قرار
+                  // می‌گیره. این‌جا نوار نداریم، پس همون مقدار رو از ارتفاعِ
+                  // در دسترس کم می‌کنیم تا کارت عیناً هم‌اندازه بشه.
+                  final cardHeight =
+                      (viewport.maxHeight - SwipeMetrics.navHeight - bottomInset).clamp(320.0, double.infinity).toDouble();
                   return SingleChildScrollView(
                     controller: _scrollController,
                     physics: _unlocked ? const ClampingScrollPhysics() : const NeverScrollableScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
-                    child: LayoutBuilder(builder: (context, content) {
-                      final photoHeight = content.maxWidth * 4 / 3; // نسبتِ ۳:۴
-                      final spacer = (availableHeight - photoHeight).clamp(0.0, double.infinity);
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(20),
-                            child: AspectRatio(
-                              aspectRatio: 3 / 4,
-                              child: _PhotoCard(
-                                urls: urls,
-                                index: _index,
-                                name: widget.profile.name,
-                                age: widget.profile.age,
-                                block: block,
-                                buildBlock: block == null ? null : () => _buildBlock(block),
-                                arrowDown: _arrowDown,
-                                onArrowTap: _onArrowTap,
-                                onTapUp: _onTapUp,
-                              ),
+                    padding: EdgeInsets.only(bottom: 28 + bottomInset),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // کارت: تمام‌عرض، فقط گوشه‌های پایین گرد — مثل SwipeProfileCard.
+                        SizedBox(
+                          height: cardHeight,
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(SwipeMetrics.cardRadius)),
+                            child: _PhotoCard(
+                              urls: urls,
+                              index: _index,
+                              name: widget.profile.name,
+                              age: widget.profile.age,
+                              block: block,
+                              buildBlock: block == null ? null : () => _buildBlock(block),
+                              arrowDown: _expanded,
+                              onArrowTap: _onArrowTap,
+                              onTapUp: _onTapUp,
                             ),
                           ),
-                          // این فاصله‌ی خالی همون چیزیه که تا قبل از زدنِ فلش،
-                          // اطلاعاتِ پروفایل رو کاملاً بیرون از دیدِ اولیه نگه
-                          // می‌داره — بدون این، چون کارتِ عکس دیگه تمامِ صفحه
-                          // رو پر نمی‌کنه، اطلاعات از همون اول جزئی دیده می‌شد.
-                          SizedBox(height: spacer),
-                          const SizedBox(height: 18),
-                          MyProfileDetailSheet(
-                            profile: widget.profile,
-                            promptTextMap: widget.promptTextMap,
-                            interestLabelMap: widget.interestLabelMap,
+                        ),
+                        // اطلاعات درست زیرِ کارت (فاصله‌ی ثابت، بدون اسپیسرِ خالی).
+                        // تا وقتی اسکرول نشده مخفیه و با اسکرول محو→آشکار می‌شه؛
+                        // پس قبل از زدنِ فلش چیزی از اون زیرِ کارت دیده نمی‌شه.
+                        const SizedBox(height: 12),
+                        AnimatedBuilder(
+                          animation: _scrollController,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: MyProfileDetailSheet(
+                              profile: widget.profile,
+                              promptTextMap: widget.promptTextMap,
+                              interestLabelMap: widget.interestLabelMap,
+                            ),
                           ),
-                        ],
-                      );
-                    }),
+                          builder: (context, child) => Opacity(
+                            opacity: (_offset / _revealDistance).clamp(0.0, 1.0).toDouble(),
+                            child: child,
+                          ),
+                        ),
+                      ],
+                    ),
                   );
                 }),
               ),
@@ -293,9 +359,10 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
 // اجزای کوچیک
 // -----------------------------------------------------------------------
 
-/// کارتِ عکس — نسبتِ ثابت (۳:۴)، عکس + گرادینتِ مشکیِ پایین + اسم/فلش/بلوکِ
-/// اطلاعات روش. چون خودِ صفحه (نه این کارت) اسکرول می‌شه، این ویجت فقط یه
-/// آیتمِ اولِ یه Column معمولیه — عیناً MatchProfileScreen.
+/// کارتِ عکس — عکس + گرادینت‌های بالا/پایین + اسم/فلش/بلوکِ اطلاعات روش،
+/// با همون گرادینت و همون فاصله‌های SwipeProfileCard (SwipeMetrics)، تا اسم و
+/// سن دقیقاً تو همون محلِ کارتِ سواپ بشینه. چون خودِ صفحه (نه این کارت)
+/// اسکرول می‌شه، این ویجت فقط یه آیتمِ اولِ یه Column معمولیه.
 class _PhotoCard extends StatelessWidget {
   final List<String> urls;
   final int index;
@@ -322,92 +389,141 @@ class _PhotoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, constraints) {
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          if (urls.isEmpty)
-            Container(
-              color: AppDark.cardAlt,
-              child: const Center(child: Icon(Icons.person, size: 110, color: AppDark.muted)),
-            )
-          else
-            Image.network(urls[index.clamp(0, urls.length - 1)], fit: BoxFit.cover, gaplessPlayback: true),
+      return ColoredBox(
+        color: SwipeColors.cardBase,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (urls.isEmpty)
+              Container(
+                color: const Color(0xFF1B1C1F),
+                child: const Center(child: Icon(Icons.person, size: 110, color: Color(0xFF3A3B40))),
+              )
+            else
+              Image.network(
+                urls[index.clamp(0, urls.length - 1)],
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return const ColoredBox(color: Color(0xFF1B1C1F));
+                },
+                errorBuilder: (context, error, stack) => Container(
+                  color: const Color(0xFF1B1C1F),
+                  child: const Center(child: Icon(Icons.broken_image_outlined, size: 56, color: Color(0xFF55565B))),
+                ),
+              ),
 
-          // گرادینتِ مشکیِ پایین — طولانی‌تر از قبل (نه با کش‌اومدنِ عکس؛
-          // فقط سهمِ خودِ گرادینت از ارتفاعِ کارت بیشتر شده).
-          IgnorePointer(
-            child: Container(
-              height: constraints.maxHeight * 0.6,
-              alignment: Alignment.bottomCenter,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: [0.0, 0.45, 1.0],
-                  colors: [Color(0x00000000), Color(0x99000000), Color(0xFF000000)],
+            // گرادینتِ بالا (زیرِ نوارِ عکس‌ها) — مثل سواپ.
+            const Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 96,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0xB3000000), Color(0x00000000)],
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
 
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapUp: (d) => onTapUp(d, constraints.maxWidth),
-            ),
-          ),
-
-          if (urls.length > 1)
+            // گرادینتِ پایین — عیناً همونِ کارتِ سواپ.
             Positioned(
-              top: 10,
-              left: 12,
-              right: 12,
-              child: IgnorePointer(
-                child: Row(
-                  children: List.generate(urls.length, (i) {
-                    return Expanded(
-                      child: Container(
-                        height: 3,
-                        margin: const EdgeInsets.symmetric(horizontal: 2),
-                        decoration: BoxDecoration(
-                          color: i == index ? Colors.white : const Color(0x66FFFFFF),
-                          borderRadius: BorderRadius.circular(2),
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: constraints.maxHeight * 0.6,
+              child: const IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: [0.0, 0.55, 0.85],
+                      colors: [Color(0x00101113), Color(0xB3101113), SwipeColors.cardBase],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: (d) => onTapUp(d, constraints.maxWidth),
+              ),
+            ),
+
+            if (urls.length > 1)
+              Positioned(
+                top: 10,
+                left: 12,
+                right: 12,
+                child: IgnorePointer(
+                  child: Row(
+                    children: List.generate(urls.length, (i) {
+                      return Expanded(
+                        child: Container(
+                          height: 3,
+                          margin: const EdgeInsets.symmetric(horizontal: 2),
+                          decoration: BoxDecoration(
+                            color: i == index ? Colors.white : const Color(0x66FFFFFF),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+              ),
+
+            // اسم/سن/فلش/بلوک — همون فاصله‌های کارتِ سواپ از کنار و پایین.
+            Positioned(
+              left: SwipeMetrics.infoSide,
+              right: SwipeMetrics.infoSide,
+              bottom: SwipeMetrics.infoBottom,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: IgnorePointer(
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(text: name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                              TextSpan(
+                                text: '  $age',
+                                style: const TextStyle(fontWeight: FontWeight.w400, color: Color(0xFFEDEDED)),
+                              ),
+                            ]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.white, fontSize: 30, height: 1.2),
+                          ),
                         ),
                       ),
-                    );
-                  }),
-                ),
+                      const SizedBox(width: 8),
+                      _OpenProfileButton(down: arrowDown, onTap: onArrowTap),
+                    ],
+                  ),
+                  if (buildBlock != null) ...[
+                    const SizedBox(height: 8),
+                    // مثل سواپ: تپ روی بلوک به عوض شدنِ عکس می‌رسه.
+                    IgnorePointer(child: buildBlock!()),
+                  ],
+                ],
               ),
             ),
-
-          Positioned(
-            left: 20,
-            right: 16,
-            bottom: 18,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text('$name  $age',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w700)),
-                    ),
-                    const SizedBox(width: 8),
-                    _OpenProfileButton(down: arrowDown, onTap: onArrowTap),
-                  ],
-                ),
-                if (buildBlock != null) ...[
-                  const SizedBox(height: 8),
-                  buildBlock!(),
-                ],
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       );
     });
   }

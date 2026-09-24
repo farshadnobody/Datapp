@@ -56,6 +56,10 @@ class SwipeMetrics {
   /// For You / nearby) — بدون status bar.
   static const double headerHeight = 58;
 
+  /// ارتفاع نوار پایین اپ (بدونِ safe-area). کارتِ سواپ همین‌قدر از پایینِ
+  /// صفحه فاصله داره؛ صفحه‌ی Preview هم برای هم‌اندازه شدنِ کارت ازش استفاده می‌کنه.
+  static const double navHeight = 64;
+
   static const double bigButton = 62;
   static const double smallButton = 46;
 
