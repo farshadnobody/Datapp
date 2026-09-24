@@ -382,6 +382,10 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
 // اجزای کوچیک
 // -----------------------------------------------------------------------
 
+/// جای ثابتِ دکمه‌ی فلش نسبت به لبه‌های چپ و پایینِ کارت.
+const double _kArrowLeft = 36;
+const double _kArrowBottom = 36;
+
 /// کارتِ عکس — عکس + گرادینت‌های بالا/پایین + اسم/فلش/بلوکِ اطلاعات روش،
 /// با همون گرادینت و همون فاصله‌های SwipeProfileCard (SwipeMetrics)، تا اسم و
 /// سن دقیقاً تو همون محلِ کارتِ سواپ بشینه. چون خودِ صفحه (نه این کارت)
@@ -547,8 +551,6 @@ class _PhotoCard extends StatelessWidget {
                           )),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      _OpenProfileButton(down: arrowDown, onTap: onArrowTap),
                     ],
                   ),
                   if (buildBlock != null) ...[
@@ -558,6 +560,13 @@ class _PhotoCard extends StatelessWidget {
                   ],
                 ],
               ),
+            ),
+
+            // دکمه‌ی فلش — جای ثابت تو کارت (پایین-چپ)، مستقل از متن‌ها.
+            Positioned(
+              left: _kArrowLeft,
+              bottom: _kArrowBottom,
+              child: _OpenProfileButton(down: arrowDown, onTap: onArrowTap),
             ),
           ],
         ),
@@ -612,8 +621,7 @@ class _Chip extends StatelessWidget {
   }
 }
 
-/// دکمه‌ی فلشِ روی عکس — دایره‌ی نیمه‌شفاف؛ با تپ ۱۸۰ درجه می‌چرخه.
-/// آیکونِ شورونِ ساده (بدون دمِ فلش) که تیندر هم استفاده می‌کنه.
+/// دکمه‌ی فلشِ روی عکس — دایره‌ی مشکی با شورونِ ضخیم؛ با تپ ۱۸۰ درجه می‌چرخه.
 class _OpenProfileButton extends StatelessWidget {
   final bool down;
   final VoidCallback onTap;
@@ -625,16 +633,40 @@ class _OpenProfileButton extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        width: 32,
-        height: 32,
-        decoration: const BoxDecoration(color: Color(0x33FFFFFF), shape: BoxShape.circle),
+        width: 36,
+        height: 36,
+        decoration: const BoxDecoration(color: Colors.black, shape: BoxShape.circle),
+        alignment: Alignment.center,
         child: AnimatedRotation(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOutCubic,
           turns: down ? 0.5 : 0,
-          child: const Icon(Icons.expand_less, size: 22, color: Colors.white),
+          child: const SizedBox(width: 18, height: 18, child: CustomPaint(painter: _ChevronPainter())),
         ),
       ),
     );
   }
+}
+
+/// شورونِ رو به بالا با خطِ ضخیم و سرِ گرد.
+class _ChevronPainter extends CustomPainter {
+  const _ChevronPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final path = Path()
+      ..moveTo(size.width * 0.1, size.height * 0.65)
+      ..lineTo(size.width * 0.5, size.height * 0.3)
+      ..lineTo(size.width * 0.9, size.height * 0.65);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
