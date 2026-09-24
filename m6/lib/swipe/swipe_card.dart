@@ -29,10 +29,13 @@ class SwipeProfileCard extends StatefulWidget {
   /// علاقه‌مندی‌های خود کاربر؛ مشترک‌ها صورتی نشون داده می‌شن.
   final Set<String> myInterests;
 
-  /// وقتی اسکرولِ کارت باز (true) یا دوباره قفل (false) می‌شه صدا زده می‌شه؛
-  /// Deck از این برای خاموش/روشن کردنِ کشیدنِ کارت استفاده می‌کنه تا کشیدنِ
-  /// عمودی با اسکرولِ اطلاعات تداخل نکنه.
+  /// لحظه‌ی شروعِ باز شدنِ اطلاعات (true) یا شروعِ برگشت (false) صدا زده می‌شه؛
+  /// صفحه‌ی سواپ با این، دکمه‌های لایک/رد/سوپرلایک/واگرد رو هاید/نمایان می‌کنه.
   final ValueChanged<bool>? onExpandedChanged;
+
+  /// true = از لحظه‌ی باز شدن، false = بعد از تموم شدنِ کاملِ برگشت. صفحه‌ی
+  /// سواپ با این کشیدنِ کارت رو خاموش/روشن می‌کنه تا با اسکرول تداخل نکنه.
+  final ValueChanged<bool>? onSwipeLockChanged;
 
   const SwipeProfileCard({
     super.key,
@@ -41,6 +44,7 @@ class SwipeProfileCard extends StatefulWidget {
     this.promptTextMap = const {},
     this.myInterests = const {},
     this.onExpandedChanged,
+    this.onSwipeLockChanged,
   });
 
   @override
@@ -49,10 +53,35 @@ class SwipeProfileCard extends StatefulWidget {
 
 enum _Block { bio, lookingFor, interests, basics }
 
-class _SwipeProfileCardState extends State<SwipeProfileCard> {
+class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerProviderStateMixin {
   int _index = 0;
 
   final ScrollController _scrollController = ScrollController();
+
+  /// انیمیشنِ فلش: ۰ = کنارِ اسم، ۱ = پایین، هم‌ردیفِ دکمه‌ی ارسال.
+  late final AnimationController _arrowCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 380),
+  );
+
+  final GlobalKey _viewportKey = GlobalKey();
+  final GlobalKey _slotKey = GlobalKey();
+
+  /// مرکزِ عمودیِ جای فلش کنارِ اسم (نسبت به بالای کارتِ بدونِ اسکرول). چون
+  /// ارتفاعِ بلوکِ زیرِ اسم عوض می‌شه، اندازه‌گیری می‌شه.
+  double? _slotCenterY;
+
+  /// عرض/ارتفاعِ ناحیه‌ی کارت (توی build پر می‌شه).
+  double _w = 360;
+  double _h = 600;
+
+  static const double _arrowSize = 36;
+
+  /// مرکزِ افقیِ دکمه‌ی واگرد تو نوارِ پایین (۵ اسلات با پدینگ ۷.۵).
+  double get _rewindCenterX => 7.5 + (_w - 15) / 10;
+
+  /// مرکزِ عمودیِ ردیفِ دکمه‌های پایین از بالای ناحیه.
+  double get _buttonsCenterY => _h - SwipeMetrics.buttonsBottom - SwipeMetrics.bigButton / 2;
 
   /// تا فلش نخوره، اسکرولِ دستی قفله.
   bool _unlocked = false;
@@ -66,15 +95,13 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> {
   /// شماره‌ی آخرین انیمیشن — تا تپِ سریع/انیمیشنِ قدیمی، حالتِ جدید رو خراب نکنه.
   int _animToken = 0;
 
-  /// اسکرولِ هینتِ اولیه وقتی فلش می‌خوره. دکمه‌های پایین روی کارت میفتن، پس
-  /// ارتفاعشون (دکمه‌ی بزرگ + فاصله‌ش تا پایین) هم اضافه شده تا همون مقدارِ
-  /// اطلاعاتِ Preview، بالای دکمه‌ها دیده بشه.
-  static const double _peekNudge = 140 + SwipeMetrics.bigButton + SwipeMetrics.buttonsBottom;
+  /// اسکرولِ هینتِ اولیه وقتی فلش می‌خوره (مثل Preview).
+  static const double _peekNudge = 140;
 
   /// چند پیکسل اسکرول تا اطلاعات کامل ظاهر بشه (قبلش محو/مخفیه).
   static const double _revealDistance = 32;
 
-  /// فضای خالیِ آخرِ اسکرول، تا آخرین باکس زیرِ دکمه‌های پایین گیر نکنه.
+  /// فضای خالیِ آخرِ اسکرول، تا آخرین باکس زیرِ فلش و دکمه‌ی ارسال گیر نکنه.
   static const double _bottomPad = SwipeMetrics.bigButton + SwipeMetrics.buttonsBottom + 24;
 
   @override
@@ -87,6 +114,7 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> {
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _arrowCtrl.dispose();
     super.dispose();
   }
 
@@ -109,7 +137,9 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> {
         _expanded = false;
         _unlocked = false;
       });
+      _arrowCtrl.reverse();
       widget.onExpandedChanged?.call(false);
+      widget.onSwipeLockChanged?.call(false);
     }
   }
 
@@ -130,6 +160,8 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> {
       _expanded = true;
     });
     widget.onExpandedChanged?.call(true);
+    widget.onSwipeLockChanged?.call(true);
+    _arrowCtrl.forward();
     _animating = true;
     // یه فریم صبر می‌کنیم تا فیزیکِ اسکرولِ باز شده اعمال بشه.
     await WidgetsBinding.instance.endOfFrame;
@@ -146,6 +178,8 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> {
   Future<void> _collapse() async {
     final token = ++_animToken;
     setState(() => _expanded = false);
+    widget.onExpandedChanged?.call(false);
+    _arrowCtrl.reverse();
     _animating = true;
     await _scrollController.animateTo(
       0,
@@ -156,7 +190,19 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> {
     _animating = false;
     // برگشت به حالتِ اول: اسکرول دوباره قفل، تا تپِ بعدیِ فلش دوباره باز کنه.
     setState(() => _unlocked = false);
-    widget.onExpandedChanged?.call(false);
+    widget.onSwipeLockChanged?.call(false);
+  }
+
+  /// جای فلشِ کنارِ اسم رو نسبت به کارت اندازه می‌گیره (بدونِ اثرِ اسکرول).
+  void _measureSlot() {
+    final slot = _slotKey.currentContext?.findRenderObject();
+    final vp = _viewportKey.currentContext?.findRenderObject();
+    if (slot is! RenderBox || vp is! RenderBox || !slot.attached || !vp.attached) return;
+    final c = slot.localToGlobal(slot.size.center(Offset.zero), ancestor: vp);
+    final y0 = c.dy + _offset;
+    if (_slotCenterY == null || (y0 - _slotCenterY!).abs() > 0.5) {
+      setState(() => _slotCenterY = y0);
+    }
   }
 
   List<String> get _photoUrls => widget.candidate.photos
@@ -189,45 +235,87 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> {
   @override
   Widget build(BuildContext context) {
     final urls = _photoUrls;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _measureSlot();
+    });
     // خودِ کارت (نه یه صفحه‌ی جدا) اسکرول می‌شه: کارت به اندازه‌ی کلِ فضای Deck
     // اولین آیتمِ یه Column‌ـه و اطلاعاتِ کامل درست زیرش. تا فلش نخوره اسکرول
     // قفله و اطلاعات هم مخفیه.
     return LayoutBuilder(builder: (context, viewport) {
-      return SingleChildScrollView(
-        controller: _scrollController,
-        physics: _unlocked ? const ClampingScrollPhysics() : const NeverScrollableScrollPhysics(),
-        padding: const EdgeInsets.only(bottom: _bottomPad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(
-              height: viewport.maxHeight,
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(SwipeMetrics.cardRadius),
-                ),
-                child: _buildCard(urls),
+      _w = viewport.maxWidth;
+      _h = viewport.maxHeight;
+      return Stack(
+        key: _viewportKey,
+        fit: StackFit.expand,
+        children: [
+          // وقتی اطلاعات نمایش داده می‌شه پشتِ کارت کاملاً مات می‌شه تا کارتِ
+          // بعدی از زیرش دیده نشه. تو حالتِ اول (بدونِ اسکرول) شفافه، تا
+          // گوشه‌های گردِ پایینِ کارت مثل قبل باشه.
+          AnimatedBuilder(
+            animation: _scrollController,
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              physics: _unlocked ? const ClampingScrollPhysics() : const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.only(bottom: _bottomPad),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    height: viewport.maxHeight,
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        bottom: Radius.circular(SwipeMetrics.cardRadius),
+                      ),
+                      child: _buildCard(urls),
+                    ),
+                  ),
+                  // اطلاعات درست زیرِ کارت؛ تا وقتی اسکرول نشده مخفیه و با
+                  // اسکرول محو→آشکار می‌شه.
+                  const SizedBox(height: 12),
+                  AnimatedBuilder(
+                    animation: _scrollController,
+                    child: DiscoveryProfileDetailSheet(
+                      candidate: widget.candidate,
+                      promptTextMap: widget.promptTextMap,
+                      interestLabelMap: widget.interestLabels,
+                    ),
+                    builder: (context, child) => Opacity(
+                      opacity: (_offset / _revealDistance).clamp(0.0, 1.0).toDouble(),
+                      child: child,
+                    ),
+                  ),
+                ],
               ),
             ),
-            // اطلاعات درست زیرِ کارت؛ تا وقتی اسکرول نشده مخفیه و با اسکرول
-            // محو→آشکار می‌شه.
-            const SizedBox(height: 12),
-            AnimatedBuilder(
-              animation: _scrollController,
-              child: DiscoveryProfileDetailSheet(
-                candidate: widget.candidate,
-                promptTextMap: widget.promptTextMap,
-                interestLabelMap: widget.interestLabels,
-              ),
-              builder: (context, child) => Opacity(
-                opacity: (_offset / _revealDistance).clamp(0.0, 1.0).toDouble(),
-                child: child,
-              ),
+            builder: (context, child) => ColoredBox(
+              color: (_unlocked || _offset > 0) ? SwipeColors.black : Colors.transparent,
+              child: child,
             ),
-          ],
-        ),
+          ),
+          _buildArrow(),
+        ],
       );
     });
+  }
+
+  /// فلش — روی کارت شناوره (از اسکرول جداست). کنارِ اسم شروع می‌شه و با تپ،
+  /// با انیمیشن میاد پایین، هم‌ردیفِ دکمه‌ی ارسال، و هم‌اندازه‌ی اون (بزرگ) می‌شه.
+  Widget _buildArrow() {
+    final slotY = _slotCenterY;
+    if (slotY == null) return const SizedBox.shrink();
+    return AnimatedBuilder(
+      animation: _arrowCtrl,
+      builder: (context, _) {
+        final t = Curves.easeOutCubic.transform(_arrowCtrl.value);
+        final size = _arrowSize + (SwipeMetrics.smallButton - _arrowSize) * t;
+        final cy = slotY + (_buttonsCenterY - slotY) * t;
+        return Positioned(
+          left: _rewindCenterX - size / 2,
+          top: cy - size / 2,
+          child: _OpenProfileButton(size: size, down: _expanded, onTap: _onArrowTap),
+        );
+      },
+    );
   }
 
   Widget _buildCard(List<String> urls) {
@@ -354,8 +442,7 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> {
         if (_pillLabel(c.activityStatus) != null)
           IgnorePointer(child: _fade(_StatusPill(status: c.activityStatus!))),
         const SizedBox(height: 8),
-        // فلش هم‌ردیفِ اسم (وسط‌چینِ عمودی)؛ خودش محو نمی‌شه، چون باید برای
-        // بستنِ اطلاعات هم قابلِ تپ بمونه.
+        // فلش هم‌ردیفِ اسم (وسط‌چینِ عمودی).
         Row(
           children: [
             Expanded(
@@ -385,7 +472,14 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> {
               ),
             ),
             const SizedBox(width: 8),
-            _OpenProfileButton(down: _expanded, onTap: _onArrowTap),
+            // جای خالیِ فلش (فلشِ اصلی شناوره و روی همین نقطه میشینه). چپ‌فاصله
+            // داده شده تا مرکزش با مرکزِ دکمه‌ی واگرد یکی باشه.
+            Padding(
+              padding: EdgeInsets.only(
+                left: (_rewindCenterX - _arrowSize / 2 - SwipeMetrics.infoSide).clamp(0.0, 200.0).toDouble(),
+              ),
+              child: SizedBox(key: _slotKey, width: _arrowSize, height: _arrowSize),
+            ),
           ],
         ),
         if (block != null) ...[
@@ -701,9 +795,10 @@ class _PhotoDots extends StatelessWidget {
 
 /// دکمه‌ی فلشِ کنارِ اسم — دایره‌ی مشکی با شورونِ ضخیم؛ با تپ ۱۸۰ درجه می‌چرخه.
 class _OpenProfileButton extends StatelessWidget {
+  final double size;
   final bool down;
   final VoidCallback onTap;
-  const _OpenProfileButton({required this.down, required this.onTap});
+  const _OpenProfileButton({required this.size, required this.down, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -711,15 +806,20 @@ class _OpenProfileButton extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        width: 36,
-        height: 36,
+        width: size,
+        height: size,
         decoration: const BoxDecoration(color: Colors.black, shape: BoxShape.circle),
         alignment: Alignment.center,
         child: AnimatedRotation(
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOutCubic,
           turns: down ? 0.5 : 0,
-          child: const SizedBox(width: 18, height: 18, child: CustomPaint(painter: _ChevronPainter())),
+          // شورون هم با بزرگ شدنِ دکمه متناسب بزرگ می‌شه.
+          child: SizedBox(
+            width: size / 2,
+            height: size / 2,
+            child: const CustomPaint(painter: _ChevronPainter()),
+          ),
         ),
       ),
     );

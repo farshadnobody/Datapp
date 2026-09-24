@@ -65,9 +65,13 @@ class _SwipeScreenState extends State<SwipeScreen> {
 
   int _tab = 0; // 0 = برای تو، 1 = نزدیک
 
-  /// publicId کارتی که اطلاعاتش باز شده (اسکرولِ داخلِ کارت فعاله). تا وقتی
-  /// باز مونده، کشیدنِ کارت خاموشه تا با اسکرول تداخل نکنه.
+  /// publicId کارتی که اطلاعاتش باز شده؛ تا وقتی باز مونده دکمه‌های لایک/رد/
+  /// سوپرلایک/واگرد هاید می‌شن.
   String? _expandedId;
+
+  /// publicId کارتی که کشیدنش قفله (از باز شدنِ اطلاعات تا تموم شدنِ برگشت)، تا
+  /// کشیدنِ کارت با اسکرولِ اطلاعات تداخل نکنه.
+  String? _lockedId;
 
   int _remaining = SwipeOnboarding.remaining;
   bool get _onboarding => _remaining > 0;
@@ -188,6 +192,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
     _loadingMore = false;
     setState(() {
       _expandedId = null;
+      _lockedId = null;
       _stack = [];
       _error = null;
     });
@@ -245,6 +250,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
     _excluded.add(c.publicId);
     setState(() {
       _expandedId = null;
+      _lockedId = null;
       _stack = _stack.where((x) => !identical(x, c)).toList();
       _history.add(_SwipeRecord(c, dir));
       if (_history.length > 10) _history.removeAt(0);
@@ -287,6 +293,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
     _deck.prepareRewind(last.direction);
     setState(() {
       _expandedId = null;
+      _lockedId = null;
       _stack = [last.candidate, ..._stack];
     });
     // لایک/سوپرلایکِ ثبت‌شده رو برمی‌داریم؛ برای «رد» endpoint جدایی نیست.
@@ -713,7 +720,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
           items: _stack,
           controller: _deck,
           superLikeEnabled: !_onboarding,
-          swipeEnabled: _stack.first.publicId != _expandedId,
+          swipeEnabled: _stack.first.publicId != _lockedId,
           canSwipe: _canSwipe,
           onBlocked: _onBlocked,
           onSwiped: _onSwiped,
@@ -726,6 +733,10 @@ class _SwipeScreenState extends State<SwipeScreen> {
             onExpandedChanged: (open) {
               if (!mounted) return;
               setState(() => _expandedId = open ? c.publicId : (_expandedId == c.publicId ? null : _expandedId));
+            },
+            onSwipeLockChanged: (locked) {
+              if (!mounted) return;
+              setState(() => _lockedId = locked ? c.publicId : (_lockedId == c.publicId ? null : _lockedId));
             },
           ),
         ),
@@ -740,6 +751,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
               progress: _deck.progress,
               extended: !_onboarding,
               canRewind: _history.isNotEmpty,
+              hideActions: _expandedId != null,
               onPass: () => _deck.swipe(SwipeDirection.left),
               onLike: () => _deck.swipe(SwipeDirection.right),
               onSuperLike: () => _deck.swipe(SwipeDirection.up),

@@ -14,6 +14,10 @@ class SwipeActionBar extends StatelessWidget {
   final ValueListenable<SwipeProgress> progress;
   final bool extended;
   final bool canRewind;
+
+  /// true → ضربدر/ستاره/قلب/واگرد با محو و کوچیک شدن هاید می‌شن (دکمه‌ی ارسال
+  /// سر جاش می‌مونه). وقتی اطلاعاتِ پروفایل باز شده استفاده می‌شه.
+  final bool hideActions;
   final VoidCallback onPass;
   final VoidCallback onLike;
   final VoidCallback onSuperLike;
@@ -25,6 +29,7 @@ class SwipeActionBar extends StatelessWidget {
     required this.progress,
     required this.extended,
     required this.canRewind,
+    this.hideActions = false,
     required this.onPass,
     required this.onLike,
     required this.onSuperLike,
@@ -45,9 +50,9 @@ class SwipeActionBar extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _passButton(size: SwipeMetrics.bigButton + 1, thick: false, dark: true),
+        _hideable(_passButton(size: SwipeMetrics.bigButton + 1, thick: false, dark: true)),
         const SizedBox(width: 27),
-        _likeButton(size: SwipeMetrics.bigButton + 1, filledRest: false, dark: true),
+        _hideable(_likeButton(size: SwipeMetrics.bigButton + 1, filledRest: false, dark: true)),
       ],
     );
   }
@@ -58,10 +63,10 @@ class SwipeActionBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 7.5),
       child: Row(
         children: [
-          slot(_rewindButton()),
-          slot(_passButton(size: SwipeMetrics.bigButton, thick: true, dark: false)),
-          slot(_superLikeButton()),
-          slot(_likeButton(size: SwipeMetrics.bigButton, filledRest: true, dark: false)),
+          slot(_hideable(_rewindButton())),
+          slot(_hideable(_passButton(size: SwipeMetrics.bigButton, thick: true, dark: false))),
+          slot(_hideable(_superLikeButton())),
+          slot(_hideable(_likeButton(size: SwipeMetrics.bigButton, filledRest: true, dark: false))),
           slot(_sendButton()),
         ],
       ),
@@ -69,6 +74,27 @@ class SwipeActionBar extends StatelessWidget {
   }
 
   // ---------------------------------------------------------------------
+
+  /// هاید/نمایان شدنِ سریع و ملایم. فقط به یه مقدارِ بولین وصله (نه به مقدارِ
+  /// اسکرول)، پس همیشه خودش کامل می‌شه و نمی‌شه نیمه‌هاید نگهش داشت.
+  static const Duration _hideDuration = Duration(milliseconds: 120);
+
+  Widget _hideable(Widget child) {
+    return IgnorePointer(
+      ignoring: hideActions,
+      child: AnimatedOpacity(
+        opacity: hideActions ? 0 : 1,
+        duration: _hideDuration,
+        curve: Curves.easeOut,
+        child: AnimatedScale(
+          scale: hideActions ? 0.85 : 1,
+          duration: _hideDuration,
+          curve: Curves.easeOut,
+          child: child,
+        ),
+      ),
+    );
+  }
 
   Widget _passButton({required double size, required bool thick, required bool dark}) {
     return ValueListenableBuilder<SwipeProgress>(
