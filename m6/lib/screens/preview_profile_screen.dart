@@ -231,39 +231,55 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
                 ]),
               ),
               Expanded(
-                child: SingleChildScrollView(
-                  controller: _scrollController,
-                  physics: _unlocked ? const ClampingScrollPhysics() : const NeverScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: AspectRatio(
-                          aspectRatio: 3 / 4,
-                          child: _PhotoCard(
-                            urls: urls,
-                            index: _index,
-                            name: widget.profile.name,
-                            age: widget.profile.age,
-                            block: block,
-                            buildBlock: block == null ? null : () => _buildBlock(block),
-                            arrowDown: _arrowDown,
-                            onArrowTap: _onArrowTap,
-                            onTapUp: _onTapUp,
+                child: LayoutBuilder(builder: (context, viewport) {
+                  // ارتفاعِ واقعیِ قابل‌مشاهده (پدینگِ بالا/پایینِ اسکرول‌ویو رو
+                  // هم کم می‌کنیم) — تا بفهمیم زیرِ کارتِ عکس، قبل از اسکرول،
+                  // چقدر فضای خالی لازمه که هیچی از اطلاعاتِ پروفایل دیده نشه.
+                  const verticalPadding = 4.0 + 28.0;
+                  final availableHeight = viewport.maxHeight - verticalPadding;
+                  return SingleChildScrollView(
+                    controller: _scrollController,
+                    physics: _unlocked ? const ClampingScrollPhysics() : const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+                    child: LayoutBuilder(builder: (context, content) {
+                      final photoHeight = content.maxWidth * 4 / 3; // نسبتِ ۳:۴
+                      final spacer = (availableHeight - photoHeight).clamp(0.0, double.infinity);
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: AspectRatio(
+                              aspectRatio: 3 / 4,
+                              child: _PhotoCard(
+                                urls: urls,
+                                index: _index,
+                                name: widget.profile.name,
+                                age: widget.profile.age,
+                                block: block,
+                                buildBlock: block == null ? null : () => _buildBlock(block),
+                                arrowDown: _arrowDown,
+                                onArrowTap: _onArrowTap,
+                                onTapUp: _onTapUp,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      MyProfileDetailSheet(
-                        profile: widget.profile,
-                        promptTextMap: widget.promptTextMap,
-                        interestLabelMap: widget.interestLabelMap,
-                      ),
-                    ],
-                  ),
-                ),
+                          // این فاصله‌ی خالی همون چیزیه که تا قبل از زدنِ فلش،
+                          // اطلاعاتِ پروفایل رو کاملاً بیرون از دیدِ اولیه نگه
+                          // می‌داره — بدون این، چون کارتِ عکس دیگه تمامِ صفحه
+                          // رو پر نمی‌کنه، اطلاعات از همون اول جزئی دیده می‌شد.
+                          SizedBox(height: spacer),
+                          const SizedBox(height: 18),
+                          MyProfileDetailSheet(
+                            profile: widget.profile,
+                            promptTextMap: widget.promptTextMap,
+                            interestLabelMap: widget.interestLabelMap,
+                          ),
+                        ],
+                      );
+                    }),
+                  );
+                }),
               ),
             ],
           ),
@@ -317,16 +333,17 @@ class _PhotoCard extends StatelessWidget {
           else
             Image.network(urls[index.clamp(0, urls.length - 1)], fit: BoxFit.cover, gaplessPlayback: true),
 
-          // گرادینتِ مشکیِ پایین — ته‌ش کاملاً مشکی، جایی که اسم و بلوک می‌شینن.
+          // گرادینتِ مشکیِ پایین — طولانی‌تر از قبل (نه با کش‌اومدنِ عکس؛
+          // فقط سهمِ خودِ گرادینت از ارتفاعِ کارت بیشتر شده).
           IgnorePointer(
             child: Container(
-              height: constraints.maxHeight * 0.46,
+              height: constraints.maxHeight * 0.6,
               alignment: Alignment.bottomCenter,
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  stops: [0.0, 0.5, 1.0],
+                  stops: [0.0, 0.45, 1.0],
                   colors: [Color(0x00000000), Color(0x99000000), Color(0xFF000000)],
                 ),
               ),

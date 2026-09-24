@@ -55,34 +55,19 @@ class _MatchesScreenState extends State<MatchesScreen> {
       try {
         conversations = await ApiClient.fetchConversations();
       } catch (_) {
-        // اگه /api/conversations هنوز نیست: از لیستِ خامِ متچ‌ها (که همیشه
-        // بوده) شروع می‌کنیم، ولی برای هر متچ آخرین پیامش رو هم جدا
-        // می‌گیریم (با /api/messages که از قبل کار می‌کرد) تا واقعاً
-        // معلوم بشه کدوم متچ پیام داره و آخرین پیامش چی بوده — وگرنه هیچ
-        // متچی هیچ‌وقت زیرِ «پیام‌ها» نمی‌رفت.
+        // اگه /api/conversations هنوز نیست، از لیستِ خامِ متچ‌ها (که همیشه
+        // بوده) به‌عنوان جایگزین استفاده کن — بدون پیام/وضعیتِ نوبت، ولی
+        // صفحه خالی نمی‌مونه. با پیاده‌سازیِ /api/conversations رو بک‌اند،
+        // این fallback خودکار کنار می‌ره.
         final raw = await ApiClient.fetchMatches();
-        conversations = await Future.wait(raw.map((m) async {
-          try {
-            final messages = await ApiClient.fetchMessages(m.publicId);
-            final last = messages.isEmpty ? null : messages.last;
-            return ConversationSummary(
-              publicId: m.publicId,
-              name: m.name,
-              photoUrl: m.photoUrl,
-              matchedAt: m.matchedAt,
-              lastMessageBody: last?.body,
-              lastMessageAt: last?.sentAt,
-              lastMessageFromMe: last?.fromMe ?? false,
-            );
-          } catch (_) {
-            return ConversationSummary(
-              publicId: m.publicId,
-              name: m.name,
-              photoUrl: m.photoUrl,
-              matchedAt: m.matchedAt,
-            );
-          }
-        }));
+        conversations = raw
+            .map((m) => ConversationSummary(
+                  publicId: m.publicId,
+                  name: m.name,
+                  photoUrl: m.photoUrl,
+                  matchedAt: m.matchedAt,
+                ))
+            .toList();
       }
       try {
         likes = await ApiClient.fetchLikesSummary();
