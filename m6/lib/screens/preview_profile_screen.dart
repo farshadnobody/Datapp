@@ -58,6 +58,16 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
   /// چند پیکسل اسکرول تا اطلاعات کامل ظاهر بشه (قبلش محو/مخفیه).
   static const double _revealDistance = 32;
 
+  /// فاصله‌ی کارتِ عکس از هدر (کارت این‌قدر پایین‌تر شروع می‌شه).
+  static const double _cardTopGap = 36;
+
+  /// کارت این‌قدر هم از پایین کوتاه‌تر می‌شه.
+  static const double _cardBottomCut = 16;
+
+  /// فاصله‌ی اسم/متن تا لبه‌ی پایینِ کارت. مقدارش طوری کم شده که اسم و سن
+  /// همون فاصله‌ی قبلی رو از بالای کارت حفظ کنن (کارت کوتاه‌تر شده).
+  static const double _infoBottom = SwipeMetrics.infoBottom - _cardTopGap - _cardBottomCut;
+
   @override
   void initState() {
     super.initState();
@@ -296,8 +306,13 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
                   // تو سواپ، کارت بین هدر و نوارِ پایین (۶۴ + safe-area) قرار
                   // می‌گیره. این‌جا نوار نداریم، پس همون مقدار رو از ارتفاعِ
                   // در دسترس کم می‌کنیم تا کارت عیناً هم‌اندازه بشه.
-                  final cardHeight =
-                      (viewport.maxHeight - SwipeMetrics.navHeight - bottomInset).clamp(320.0, double.infinity).toDouble();
+                  final cardHeight = (viewport.maxHeight -
+                          SwipeMetrics.navHeight -
+                          bottomInset -
+                          _cardTopGap -
+                          _cardBottomCut)
+                      .clamp(320.0, double.infinity)
+                      .toDouble();
                   return SingleChildScrollView(
                     controller: _scrollController,
                     physics: _unlocked ? const ClampingScrollPhysics() : const NeverScrollableScrollPhysics(),
@@ -305,11 +320,13 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // کارت: تمام‌عرض، فقط گوشه‌های پایین گرد — مثل SwipeProfileCard.
+                        // فاصله‌ی بین هدر و کارت.
+                        const SizedBox(height: _cardTopGap),
+                        // کارت: تمام‌عرض، هر چهار گوشه گرد.
                         SizedBox(
                           height: cardHeight,
                           child: ClipRRect(
-                            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(SwipeMetrics.cardRadius)),
+                            borderRadius: const BorderRadius.all(Radius.circular(SwipeMetrics.cardRadius)),
                             child: _PhotoCard(
                               urls: urls,
                               index: _index,
@@ -317,6 +334,7 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
                               age: widget.profile.age,
                               block: block,
                               buildBlock: block == null ? null : () => _buildBlock(block),
+                              infoBottom: _infoBottom,
                               arrowDown: _expanded,
                               onArrowTap: _onArrowTap,
                               onTapUp: _onTapUp,
@@ -329,13 +347,11 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
                         const SizedBox(height: 12),
                         AnimatedBuilder(
                           animation: _scrollController,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: MyProfileDetailSheet(
-                              profile: widget.profile,
-                              promptTextMap: widget.promptTextMap,
-                              interestLabelMap: widget.interestLabelMap,
-                            ),
+                          // بدون پدینگِ افقی: باکس‌ها هم‌عرضِ کارتِ عکس‌ان.
+                          child: MyProfileDetailSheet(
+                            profile: widget.profile,
+                            promptTextMap: widget.promptTextMap,
+                            interestLabelMap: widget.interestLabelMap,
                           ),
                           builder: (context, child) => Opacity(
                             opacity: (_offset / _revealDistance).clamp(0.0, 1.0).toDouble(),
@@ -370,6 +386,7 @@ class _PhotoCard extends StatelessWidget {
   final int age;
   final _Block? block;
   final Widget Function()? buildBlock;
+  final double infoBottom;
   final bool arrowDown;
   final VoidCallback onArrowTap;
   final void Function(TapUpDetails details, double width) onTapUp;
@@ -381,6 +398,7 @@ class _PhotoCard extends StatelessWidget {
     required this.age,
     required this.block,
     required this.buildBlock,
+    required this.infoBottom,
     required this.arrowDown,
     required this.onArrowTap,
     required this.onTapUp,
@@ -433,12 +451,12 @@ class _PhotoCard extends StatelessWidget {
               ),
             ),
 
-            // گرادینتِ پایین — عیناً همونِ کارتِ سواپ.
+            // گرادینتِ پایین — مثل سواپ، ولی بلندتر تا پشتِ متن‌ها رو کامل بگیره.
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
-              height: constraints.maxHeight * 0.6,
+              height: constraints.maxHeight * 0.75,
               child: const IgnorePointer(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
@@ -487,7 +505,7 @@ class _PhotoCard extends StatelessWidget {
             Positioned(
               left: SwipeMetrics.infoSide,
               right: SwipeMetrics.infoSide,
-              bottom: SwipeMetrics.infoBottom,
+              bottom: infoBottom,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
