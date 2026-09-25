@@ -55,8 +55,12 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
 
   static const double _peekNudge = 140; // اسکرولِ هینتِ اولیه وقتی فلش می‌خوره.
 
-  /// چند پیکسل اسکرول تا اطلاعات کامل ظاهر بشه (قبلش محو/مخفیه).
-  static const double _revealDistance = 32;
+  /// بیشتر از این مقدار اسکرول = متنِ روی کارت هاید و اطلاعات نمایان.
+  static const double _hideThreshold = 1.0;
+
+  /// true = کاربر اسکرول کرده: متنِ روی کارت کاملاً هاید و اطلاعاتِ زیرِ کارت
+  /// کاملاً نمایان. فقط دو حالت داره، نه حالتِ وسط.
+  bool _scrolled = false;
 
   /// فاصله‌ی کارتِ عکس از هدر (کارت این‌قدر پایین‌تر شروع می‌شه).
   static const double _cardTopGap = 36;
@@ -83,15 +87,16 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
 
   double get _offset => _scrollController.hasClients ? _scrollController.offset : 0.0;
 
-  /// شفافیتِ گرادینت + اسم/سن/متنِ روی کارت: با باز شدنِ اطلاعات محو می‌شن و با
-  /// برگشتِ اطلاعات به حالتِ اول، دوباره ظاهر می‌شن (هم‌زمان و معکوسِ محوشدنِ
-  /// اطلاعاتِ زیرِ کارت، با همون _revealDistance).
-  double get _overlayOpacity => 1.0 - (_offset / _revealDistance).clamp(0.0, 1.0).toDouble();
+  /// شفافیتِ گرادینت + اسم/سن/متنِ روی کارت: فقط بین «کامل نمایان» و «کامل
+  /// هاید» جابه‌جا می‌شن (بولین، نه تدریجی)، پس هیچ‌وقت نیمه‌هاید نمی‌مونن.
+  double get _overlayOpacity => _scrolled ? 0.0 : 1.0;
 
   /// اگه کاربر خودش دستی برگشت بالا، فلش هم برمی‌گرده به حالتِ اول.
   void _onScroll() {
-    // شرط از _offset < 8 به _offset <= 0 تغییر می‌کند
-    if (_expanded && !_animating && _offset <= 0) {
+    if (_animating) return;
+    final scrolled = _offset > _hideThreshold;
+    if (scrolled != _scrolled) setState(() => _scrolled = scrolled);
+    if (_expanded && _offset <= 0) {
       setState(() {
         _expanded = false;
         _unlocked = false;
@@ -197,6 +202,7 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
     setState(() {
       _unlocked = true;
       _expanded = true;
+      _scrolled = true;
     });
     _animating = true;
     // یه فریم صبر می‌کنیم تا فیزیکِ اسکرولِ باز شده اعمال بشه.
@@ -213,7 +219,10 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
 
   Future<void> _collapse() async {
     final token = ++_animToken;
-    setState(() => _expanded = false);
+    setState(() {
+      _expanded = false;
+      _scrolled = false;
+    });
     _animating = true;
     await _scrollController.animateTo(
       0,
@@ -356,17 +365,15 @@ class _PreviewProfileScreenState extends State<PreviewProfileScreen> {
                         // تا وقتی اسکرول نشده مخفیه و با اسکرول محو→آشکار می‌شه؛
                         // پس قبل از زدنِ فلش چیزی از اون زیرِ کارت دیده نمی‌شه.
                         const SizedBox(height: 12),
-                        AnimatedBuilder(
-                          animation: _scrollController,
+                        AnimatedOpacity(
+                          opacity: _scrolled ? 1 : 0,
+                          duration: const Duration(milliseconds: 150),
+                          curve: Curves.easeOut,
                           // بدون پدینگِ افقی: باکس‌ها هم‌عرضِ کارتِ عکس‌ان.
                           child: MyProfileDetailSheet(
                             profile: widget.profile,
                             promptTextMap: widget.promptTextMap,
                             interestLabelMap: widget.interestLabelMap,
-                          ),
-                          builder: (context, child) => Opacity(
-                            opacity: (_offset / _revealDistance).clamp(0.0, 1.0).toDouble(),
-                            child: child,
                           ),
                         ),
                       ],
@@ -426,7 +433,12 @@ class _PhotoCard extends StatelessWidget {
   Widget _fade(Widget child) => AnimatedBuilder(
         animation: scroll,
         child: child,
-        builder: (context, child) => Opacity(opacity: overlayOpacity(), child: child),
+        builder: (context, child) => AnimatedOpacity(
+          opacity: overlayOpacity(),
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          child: child,
+        ),
       );
 
   @override

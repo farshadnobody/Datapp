@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../api_client.dart';
@@ -83,10 +85,13 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
   );
 
   final GlobalKey _viewportKey = GlobalKey();
-  final GlobalKey _slotKey = GlobalKey();
 
-  /// مرکزِ عمودیِ جای فلش کنارِ اسم (نسبت به بالای کارتِ بدونِ اسکرول). چون
-  /// ارتفاعِ بلوکِ زیرِ اسم عوض می‌شه، اندازه‌گیری می‌شه.
+  /// روی خودِ متنِ اسم گذاشته می‌شه — مرکزِ فلش دقیقاً از روی مرکزِ همین باکس
+  /// اندازه‌گیری می‌شه، نه یه باکسِ جدا با اندازه‌ی فرضی.
+  final GlobalKey _nameKey = GlobalKey();
+
+  /// مرکزِ عمودیِ اسم (نسبت به بالای کارتِ بدونِ اسکرول). چون ارتفاعِ بلوکِ
+  /// زیرِ اسم عوض می‌شه، اندازه‌گیری می‌شه.
   double? _slotCenterY;
 
   /// عرض/ارتفاعِ ناحیه‌ی کارت (توی build پر می‌شه).
@@ -166,9 +171,12 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
         _expanded = false;
         _unlocked = false;
       });
-      _arrowCtrl.reverse();
-      widget.onExpandedChanged?.call(false);
       widget.onSwipeLockChanged?.call(false);
+      // اول فلش برمی‌گرده سرِ جاش (کنارِ اسم)، بعد دکمه‌های لایک/رد/... ظاهر
+      // می‌شن — نه هم‌زمان، تا وسطِ راه رویِ هم نیفتن.
+      _arrowCtrl.reverse().whenCompleteOrCancel(() {
+        if (mounted) widget.onExpandedChanged?.call(false);
+      });
     }
   }
 
@@ -211,8 +219,11 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
       _expanded = false;
       _scrolled = false;
     });
-    widget.onExpandedChanged?.call(false);
-    _arrowCtrl.reverse();
+    // اول فلش برمی‌گرده سرِ جاش (کنارِ اسم)، بعد دکمه‌های لایک/رد/... ظاهر
+    // می‌شن — نه هم‌زمان، تا وسطِ راه رویِ هم نیفتن.
+    unawaited(_arrowCtrl.reverse().whenCompleteOrCancel(() {
+      if (mounted) widget.onExpandedChanged?.call(false);
+    }));
     _animating = true;
     await _scrollController.animateTo(
       0,
@@ -226,12 +237,13 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
     widget.onSwipeLockChanged?.call(false);
   }
 
-  /// جای فلشِ کنارِ اسم رو نسبت به کارت اندازه می‌گیره (بدونِ اثرِ اسکرول).
+  /// مرکزِ عمودیِ اسم رو نسبت به کارت اندازه می‌گیره (بدونِ اثرِ اسکرول) — فلش
+  /// دقیقاً رویِ همین خط می‌شینه.
   void _measureSlot() {
-    final slot = _slotKey.currentContext?.findRenderObject();
+    final name = _nameKey.currentContext?.findRenderObject();
     final vp = _viewportKey.currentContext?.findRenderObject();
-    if (slot is! RenderBox || vp is! RenderBox || !slot.attached || !vp.attached) return;
-    final c = slot.localToGlobal(slot.size.center(Offset.zero), ancestor: vp);
+    if (name is! RenderBox || vp is! RenderBox || !name.attached || !vp.attached) return;
+    final c = name.localToGlobal(name.size.center(Offset.zero), ancestor: vp);
     final y0 = c.dy + _offset;
     if (_slotCenterY == null || (y0 - _slotCenterY!).abs() > 0.5) {
       setState(() => _slotCenterY = y0);
@@ -533,6 +545,7 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
                       ),
                     ),
                   ]),
+                  key: _nameKey,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -550,7 +563,7 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
               padding: EdgeInsets.only(
                 left: (_rewindCenterX - _arrowSize / 2 - SwipeMetrics.infoSide).clamp(0.0, 200.0).toDouble(),
               ),
-              child: SizedBox(key: _slotKey, width: _arrowSize, height: _arrowSize),
+              child: SizedBox(width: _arrowSize, height: _arrowSize),
             ),
           ],
         ),
@@ -911,7 +924,11 @@ class _OpenProfileButton extends StatelessWidget {
       child: Container(
         width: size,
         height: size,
-        decoration: const BoxDecoration(color: Colors.black, shape: BoxShape.circle),
+        decoration: BoxDecoration(
+          color: Colors.black,
+          shape: BoxShape.circle,
+          border: Border.all(color: SwipeColors.buttonBorder, width: 1),
+        ),
         alignment: Alignment.center,
         child: AnimatedRotation(
           duration: const Duration(milliseconds: 300),
