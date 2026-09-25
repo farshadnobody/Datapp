@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../api_client.dart';
@@ -221,9 +219,9 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
     });
     // اول فلش برمی‌گرده سرِ جاش (کنارِ اسم)، بعد دکمه‌های لایک/رد/... ظاهر
     // می‌شن — نه هم‌زمان، تا وسطِ راه رویِ هم نیفتن.
-    unawaited(_arrowCtrl.reverse().whenCompleteOrCancel(() {
+    _arrowCtrl.reverse().whenCompleteOrCancel(() {
       if (mounted) widget.onExpandedChanged?.call(false);
-    }));
+    });
     _animating = true;
     await _scrollController.animateTo(
       0,
