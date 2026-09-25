@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../swipe/swipe_style.dart';
+import 'explore_screen.dart';
 import 'matches_screen.dart';
 import 'profile_home_screen.dart';
 import 'swipe_screen.dart';
@@ -12,7 +13,9 @@ import 'swipe_screen.dart';
 /// - «چت» فعلاً همون صفحه‌ی متچ‌هاست (با تم تیره).
 /// - «پروفایل» دکمه‌های قبلی صفحه‌ی اصلی (ویرایش پروفایل، عکس‌های خصوصی،
 ///   خروج) رو داره.
-/// - «اکسپلور» و «لایک‌ها» فعلاً placeholder‌ان.
+/// - «اکسپلور» ساخته شده (lib/screens/explore_screen.dart) — دسته‌بندیِ
+///   نیتِ رابطه + علاقه/سبکِ زندگی، شبیهِ Explore تیندر.
+/// - «لایک‌ها» فعلاً placeholder‌ه.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -65,14 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
             index: _index,
             children: [
               SwipeScreen(onOpenMatches: () => _select(_chatTab)),
-              _lazy(
-                1,
-                () => const _ComingSoonTab(
-                  icon: Icons.explore_outlined,
-                  title: 'اکسپلور',
-                  subtitle: 'به‌زودی اینجا می‌تونی بر اساس علاقه‌مندی‌ها آدم‌های جدید پیدا کنی.',
-                ),
-              ),
+              _lazy(1, () => const ExploreScreen()),
               _lazy(
                 2,
                 () => const _ComingSoonTab(
