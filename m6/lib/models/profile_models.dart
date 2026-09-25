@@ -330,6 +330,8 @@ class DiscoveryCandidate {
   final Map<String, String> lifestyle; // {"drinking": "sober", ...}
   final Map<String, String> aboutYou; // {"communication": "phone_caller", ...}
   final String? activityStatus; // 'active' | 'recent' | 'new' | null
+  final String? wantChildren; // مثلاً "want_children" — برای دسته‌ی «بچه می‌خوام» تو اکسپلور
+  final bool verified; // برای دسته‌ی «تأیید عکس» تو اکسپلور؛ اگه بک‌اند نفرسته false می‌مونه
 
   DiscoveryCandidate({
     required this.publicId,
@@ -346,6 +348,8 @@ class DiscoveryCandidate {
     this.lifestyle = const {},
     this.aboutYou = const {},
     this.activityStatus,
+    this.wantChildren,
+    this.verified = false,
   });
 
   factory DiscoveryCandidate.fromJson(Map<String, dynamic> json) =>
@@ -370,6 +374,8 @@ class DiscoveryCandidate {
         lifestyle: _stringMap(json['lifestyle']),
         aboutYou: _stringMap(json['about_you']),
         activityStatus: _activityFrom(json),
+        wantChildren: json['want_children'] as String?,
+        verified: json['verified'] ?? false,
       );
 
   // اگه بک‌اند مستقیم `activity_status` بفرسته همون رو می‌گیریم؛ وگرنه از

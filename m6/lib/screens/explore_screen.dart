@@ -2,15 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../explore/explore_category_screen.dart';
 import '../explore/explore_data.dart';
-import '../swipe/swipe_style.dart';
 
-/// تب «اکسپلور» — دقیقاً شبیهِ صفحه‌ی Explore تیندر: به‌جایِ یه فیدِ پیوسته،
-/// یه سری تایل که هرکدوم به استکِ سواپِ مخصوصِ خودشون می‌رن.
-///
-/// هدر دو بخش داره:
-/// - «دسته‌های نیتِ رابطه» (معادلِ My Vibe تیندر) — ردیفِ افقیِ چیپ.
-/// - «دسته‌های علاقه و سبکِ زندگی» (معادلِ Passions تیندر) — گریدِ کارت‌های
-///   رنگی.
+/// تب «اکسپلور» — دقیقاً شبیهِ صفحه‌ی Explore تیندر: یه گریدِ دوستونه‌ی
+/// تخت از تایل‌های خاکستریِ تیره، هرکدوم یه ایموجیِ بزرگ، عنوان و عددِ
+/// نمایشی؛ با تپ روی هر تایل، استکِ سواپِ مخصوصِ همون دسته باز می‌شه.
 class ExploreScreen extends StatelessWidget {
   const ExploreScreen({super.key});
 
@@ -47,48 +42,30 @@ class ExploreScreen extends StatelessWidget {
                 ),
               ),
             ),
-            SliverToBoxAdapter(
-              child: _SectionHeader(
-                title: 'دسته‌های نیتِ رابطه',
-                subtitle: 'دنبالِ چه نوع رابطه‌ای‌ای؟ آدم‌های هم‌نیت رو ببین.',
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: 108,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: kIntentCategories.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 12),
-                  itemBuilder: (context, i) {
-                    final cat = kIntentCategories[i];
-                    return _IntentTile(category: cat, onTap: () => _openCategory(context, cat));
-                  },
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(20, 0, 20, 16),
+                child: Text(
+                  'با آدم‌هایی با اهدافِ مشابه آشنا شو',
+                  style: TextStyle(color: Color(0xFF8E8E93), fontSize: 15),
                 ),
               ),
             ),
-            SliverToBoxAdapter(
-              child: _SectionHeader(
-                title: 'دسته‌های علاقه و سبکِ زندگی',
-                subtitle: 'با آدم‌هایی که همون علایق رو دارن آشنا شو.',
-              ),
-            ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
                   mainAxisSpacing: 14,
                   crossAxisSpacing: 14,
-                  childAspectRatio: 1.25,
+                  childAspectRatio: 0.8,
                 ),
                 delegate: SliverChildBuilderDelegate(
                   (context, i) {
-                    final cat = kInterestLifestyleCategories[i];
-                    return _InterestTile(category: cat, onTap: () => _openCategory(context, cat));
+                    final cat = kExploreCategories[i];
+                    return _ExploreTile(category: cat, onTap: () => _openCategory(context, cat));
                   },
-                  childCount: kInterestLifestyleCategories.length,
+                  childCount: kExploreCategories.length,
                 ),
               ),
             ),
@@ -99,132 +76,58 @@ class ExploreScreen extends StatelessWidget {
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  const _SectionHeader({required this.title, required this.subtitle});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
-            style: const TextStyle(color: SwipeColors.navUnselected, fontSize: 13, height: 1.4),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// تایلِ بخشِ نیتِ رابطه — چیپِ بلندِ گردگوشه با آیکون و متن، شبیهِ کارت‌های
-/// «My Vibe» تیندر.
-class _IntentTile extends StatelessWidget {
+/// تایلِ گریدِ اکسپلور — کارتِ خاکستریِ تیره‌ی گردگوشه، با یه ایموجیِ بزرگ
+/// بالا و ردیفِ عنوان/عدد پایین، دقیقاً شبیهِ تایل‌های Explore تیندر.
+class _ExploreTile extends StatelessWidget {
   final ExploreCategory category;
   final VoidCallback onTap;
-  const _IntentTile({required this.category, required this.onTap});
+  const _ExploreTile({required this.category, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
-        child: Container(
-          width: 128,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: category.gradient,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Icon(category.icon, color: Colors.white, size: 26),
-              Text(
-                category.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  height: 1.25,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// تایلِ بخشِ علاقه/سبکِ زندگی — کارتِ گریدِ گرادیانتی با آیکونِ بزرگِ محو در
-/// پس‌زمینه، شبیهِ تایل‌های Passion تیندر.
-class _InterestTile extends StatelessWidget {
-  final ExploreCategory category;
-  final VoidCallback onTap;
-  const _InterestTile({required this.category, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
+      color: const Color(0xFF1C1C1E),
       borderRadius: BorderRadius.circular(20),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: Ink(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: category.gradient,
-            ),
-          ),
-          child: Stack(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 18, 14, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Positioned(
-                left: -10,
-                bottom: -14,
-                child: Icon(category.icon, size: 84, color: Colors.white.withOpacity(0.16)),
+              Expanded(
+                child: Center(
+                  child: Text(category.emoji, style: const TextStyle(fontSize: 54)),
+                ),
               ),
-              Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Icon(category.icon, color: Colors.white, size: 24),
-                    Text(
+              const SizedBox(height: 6),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
                       category.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
                         height: 1.25,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${category.count}',
+                    style: const TextStyle(
+                      color: Color(0xFF8E8E93),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
