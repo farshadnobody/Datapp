@@ -395,6 +395,19 @@ class ApiClient {
     return LikesSummary.fromJson(jsonDecode(response.body));
   }
 
+  /// GET /api/likes/list
+  /// جواب: آرایه‌ای از پروفایلِ کامل + is_super_like/liked_at — برای گریدِ
+  /// صفحه‌ی «لایک‌ها» (نه فقط شمارش خام مثل fetchLikesSummary).
+  static Future<List<Map<String, dynamic>>> fetchLikesList() async {
+    final response = await _get('/api/likes/list', authenticated: true);
+    if (response.statusCode != 200) {
+      final data = jsonDecode(response.body);
+      throw ApiException(data['error'] ?? 'unknown_error');
+    }
+    final list = jsonDecode(response.body) as List;
+    return list.cast<Map<String, dynamic>>();
+  }
+
   /// POST /api/matches/unmatch  {public_id}
   static Future<void> unmatch(String publicId) async {
     final response =
