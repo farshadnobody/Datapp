@@ -76,18 +76,29 @@ class _InterestsEditorScreenState extends State<InterestsEditorScreen> {
               if (_selected.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _selected
-                        .map((id) => Chip(
-                              label: Text(_labelOf(id)),
-                              labelStyle: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600),
-                              backgroundColor: Colors.white,
-                              deleteIcon: const Icon(Icons.close, size: 16, color: Colors.black),
-                              onDeleted: () => _toggle(id),
-                            ))
-                        .toList(),
+                  child: SizedBox(
+                    height: 40,
+                    child: Builder(builder: (context) {
+                      final selectedList = _selected.toList();
+                      return ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: selectedList.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (context, i) {
+                          final id = selectedList[i];
+                          return Chip(
+                            label: Text(_labelOf(id)),
+                            labelStyle: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600),
+                            backgroundColor: Colors.white,
+                            deleteIcon: const Icon(Icons.close, size: 16, color: Colors.black),
+                            onDeleted: () => _toggle(id),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                          );
+                        },
+                      );
+                    }),
                   ),
                 ),
               Padding(

@@ -888,7 +888,7 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
         onTap: onTap,
         child: Container(
           width: double.infinity,
-          height: 160,
+          height: 200,
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(color: AppDark.card, borderRadius: BorderRadius.circular(14)),
           child: Column(
@@ -930,7 +930,7 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
       onTap: () => _addOrEditPrompt(),
       child: Container(
         width: double.infinity,
-        height: 160,
+        height: 200,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: AppDark.border),
@@ -1007,7 +1007,7 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
         onTap: onTap,
         child: Container(
           width: double.infinity,
-          height: fullWidth ? 90 : 160,
+          height: fullWidth ? 90 : 200,
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(color: AppDark.card, borderRadius: BorderRadius.circular(14)),
           child: Column(

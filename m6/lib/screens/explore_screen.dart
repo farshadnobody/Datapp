@@ -98,7 +98,18 @@ class _ExploreTile extends StatelessWidget {
             children: [
               Expanded(
                 child: Center(
-                  child: Text(category.emoji, style: const TextStyle(fontSize: 54)),
+                  child: Image.asset(
+                    category.imageAsset,
+                    width: 120,
+                    height: 120,
+                    fit: BoxFit.contain,
+                    // تا وقتی عکسِ سه‌بعدیِ این دسته اضافه نشده، ایموجیِ ساده
+                    // نشون داده می‌شه که چیزی نشکنه.
+                    errorBuilder: (context, error, stackTrace) => Text(
+                      category.emoji,
+                      style: const TextStyle(fontSize: 54),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 6),
