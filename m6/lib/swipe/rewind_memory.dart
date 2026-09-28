@@ -77,3 +77,15 @@ class RewindMemory extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+/// آیا ثبتِ [direction] روی کسی که وضعیتِ قبلیش [previous] بود چیزی رو تو بک‌اند
+/// عوض می‌کنه؟ (باید با swipeChangesState تو بک‌اند یکی باشه.) اگه نه، کارت فقط
+/// رد می‌شه و چیزی برای Rewind ثبت نمی‌شه.
+bool swipeChangesState(String? previous, String direction) {
+  if (previous == null) return true;
+  if (previous == direction) return false;
+  final wasInterested = previous == 'like' || previous == 'super_like';
+  if (direction == 'pass' && wasInterested) return false;
+  if (direction == 'like' && previous == 'super_like') return false;
+  return true;
+}

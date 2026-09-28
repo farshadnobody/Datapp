@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../api_client.dart';
 import '../models/profile_models.dart';
+import '../swipe/swipe_style.dart';
 
 // نکته: onSwipe اختیاریه — وقتی از Discovery باز می‌شه پاس داده می‌شه (برای
 // لایک/رد از همین‌جا)، ولی وقتی از صفحه‌ی چت باز می‌شه (کسی که از قبل متچ
@@ -12,6 +13,9 @@ class ProfileDetailSheet extends StatelessWidget {
   final ScrollController scrollController;
   final void Function(String direction)? onSwipe;
 
+  /// نگه داشتنِ دکمه‌ی روشنِ لایک/سوپرلایک → برداشتنِ لایک.
+  final VoidCallback? onRemoveLike;
+
   const ProfileDetailSheet({
     super.key,
     required this.candidate,
@@ -19,6 +23,7 @@ class ProfileDetailSheet extends StatelessWidget {
     required this.interestLabelMap,
     required this.scrollController,
     this.onSwipe,
+    this.onRemoveLike,
   });
 
   @override
@@ -89,21 +94,61 @@ class ProfileDetailSheet extends StatelessWidget {
                 icon: const Icon(Icons.close, color: Colors.red),
                 label: const Text('رد', style: TextStyle(color: Colors.red)),
               ),
-              OutlinedButton.icon(
-                onPressed: () => onSwipe!('super_like'),
-                icon: const Icon(Icons.star, color: Colors.blue),
-                label: const Text('سوپرلایک', style: TextStyle(color: Colors.blue)),
+              _interestButton(
+                lit: candidate.previousDirection == 'super_like',
+                color: SwipeColors.superLike,
+                icon: Icons.star,
+                label: 'سوپرلایک',
+                direction: 'super_like',
               ),
-              ElevatedButton.icon(
-                onPressed: () => onSwipe!('like'),
-                icon: const Icon(Icons.favorite),
-                label: const Text('لایک'),
+              _interestButton(
+                lit: candidate.previousDirection == 'like',
+                color: SwipeColors.like,
+                icon: Icons.favorite,
+                label: 'لایک',
+                direction: 'like',
               ),
             ],
           ),
+          if (onRemoveLike != null &&
+              (candidate.previousDirection == 'like' ||
+                  candidate.previousDirection == 'super_like')) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'برای برداشتنِ لایک، دکمه‌ی روشن رو نگه دار.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          ],
         ],
         const SizedBox(height: 24),
       ],
+    );
+  }
+
+  /// دکمه‌ی لایک/سوپرلایک: اگه از قبل ثبت شده «روشن» (توپر) نشون داده می‌شه؛
+  /// زدنش فقط کارت رو رد می‌کنه، نگه داشتنش لایک رو برمی‌داره.
+  Widget _interestButton({
+    required bool lit,
+    required Color color,
+    required IconData icon,
+    required String label,
+    required String direction,
+  }) {
+    if (lit) {
+      return ElevatedButton.icon(
+        style: ElevatedButton.styleFrom(backgroundColor: color, foregroundColor: Colors.white),
+        onPressed: () => onSwipe!(direction),
+        onLongPress: onRemoveLike,
+        icon: Icon(icon),
+        label: Text(label),
+      );
+    }
+    return OutlinedButton.icon(
+      style: OutlinedButton.styleFrom(foregroundColor: color, side: BorderSide(color: color)),
+      onPressed: () => onSwipe!(direction),
+      icon: Icon(icon, color: color),
+      label: Text(label, style: TextStyle(color: color)),
     );
   }
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier;
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'remove_like_hint.dart';
 import 'swipe_deck.dart';
 import 'swipe_style.dart';
 
@@ -14,6 +16,14 @@ class SwipeActionBar extends StatelessWidget {
   final ValueListenable<SwipeProgress> progress;
   final bool extended;
   final bool canRewind;
+
+  /// true → این فرد قبلاً لایک/سوپرلایک شده؛ دکمه از قبل «روشن» نشون داده می‌شه.
+  /// دوباره زدنش فقط کارت رو رد می‌کنه و چیزی تو دیتابیس عوض نمی‌شه.
+  final bool likeLit;
+  final bool superLikeLit;
+
+  /// نگه داشتنِ طولانیِ دکمه‌ی روشنِ لایک/سوپرلایک → برداشتنِ لایک (با تأیید).
+  final VoidCallback? onRemoveLike;
 
   /// true → ضربدر/ستاره/قلب/واگرد با محو و کوچیک شدن هاید می‌شن (دکمه‌ی ارسال
   /// سر جاش می‌مونه). وقتی اطلاعاتِ پروفایل باز شده استفاده می‌شه.
@@ -33,6 +43,9 @@ class SwipeActionBar extends StatelessWidget {
     required this.progress,
     required this.extended,
     required this.canRewind,
+    this.likeLit = false,
+    this.superLikeLit = false,
+    this.onRemoveLike,
     this.hideActions = false,
     this.hideSend = false,
     required this.onPass,
@@ -126,19 +139,25 @@ class SwipeActionBar extends StatelessWidget {
     return ValueListenableBuilder<SwipeProgress>(
       valueListenable: progress,
       builder: (context, p, _) {
-        final t = (p.like * 1.4).clamp(0.0, 1.0).toDouble();
+        final t = likeLit ? 1.0 : (p.like * 1.4).clamp(0.0, 1.0).toDouble();
         final rest = dark ? SwipeColors.black : SwipeColors.buttonBg;
         final bg = Color.lerp(rest, SwipeColors.like, t)!;
         final fg = Color.lerp(SwipeColors.like, Colors.white, t)!;
         // تو حالت ۱ قلب اول توخالیه و وقتی نزدیک تأیید شد توپر می‌شه.
         final filled = filledRest || t > 0.7;
-        return _CircleButton(
-          size: size,
-          background: bg,
-          border: dark ? null : SwipeColors.buttonBorder,
-          scale: 1 + 0.08 * p.like,
-          onTap: onLike,
-          child: Icon(filled ? Icons.favorite : Icons.favorite_border, size: 32, color: fg),
+        return _HintAnchor(
+          lit: likeLit && onRemoveLike != null,
+          buttonSize: size,
+          label: 'نگه دار تا لایک برداشته بشه',
+          child: _CircleButton(
+            size: size,
+            background: bg,
+            border: dark ? null : SwipeColors.buttonBorder,
+            scale: 1 + 0.08 * p.like,
+            onTap: onLike,
+            onLongPress: likeLit ? onRemoveLike : null,
+            child: Icon(filled ? Icons.favorite : Icons.favorite_border, size: 32, color: fg),
+          ),
         );
       },
     );
@@ -148,16 +167,22 @@ class SwipeActionBar extends StatelessWidget {
     return ValueListenableBuilder<SwipeProgress>(
       valueListenable: progress,
       builder: (context, p, _) {
-        final t = p.superLike;
+        final t = superLikeLit ? 1.0 : p.superLike;
         final bg = Color.lerp(SwipeColors.buttonBg, SwipeColors.superLike, t)!;
         final fg = Color.lerp(SwipeColors.superLikeSoft, Colors.white, t)!;
-        return _CircleButton(
-          size: SwipeMetrics.smallButton,
-          background: bg,
-          border: SwipeColors.buttonBorder,
-          scale: 1 + 0.1 * t,
-          onTap: onSuperLike,
-          child: Icon(Icons.star_rounded, size: 26, color: fg),
+        return _HintAnchor(
+          lit: superLikeLit && onRemoveLike != null,
+          buttonSize: SwipeMetrics.smallButton,
+          label: 'نگه دار تا سوپرلایک برداشته بشه',
+          child: _CircleButton(
+            size: SwipeMetrics.smallButton,
+            background: bg,
+            border: SwipeColors.buttonBorder,
+            scale: 1 + 0.1 * t,
+            onTap: onSuperLike,
+            onLongPress: superLikeLit ? onRemoveLike : null,
+            child: Icon(Icons.star_rounded, size: 26, color: fg),
+          ),
         );
       },
     );
@@ -188,12 +213,115 @@ class SwipeActionBar extends StatelessWidget {
   }
 }
 
+/// حباب راهنمای یک‌باره بالای دکمه‌ی روشن. اولین باری که یه دکمه‌ی لایک/سوپرلایکِ
+/// روشن دیده می‌شه ~۴ ثانیه نشون داده می‌شه و دیگه هیچ‌وقت تکرار نمی‌شه
+/// (وضعیتش با [RemoveLikeHint] روی گوشی ذخیره می‌شه).
+class _HintAnchor extends StatefulWidget {
+  final bool lit;
+  final double buttonSize;
+  final String label;
+  final Widget child;
+  const _HintAnchor({
+    required this.lit,
+    required this.buttonSize,
+    required this.label,
+    required this.child,
+  });
+
+  @override
+  State<_HintAnchor> createState() => _HintAnchorState();
+}
+
+class _HintAnchorState extends State<_HintAnchor> {
+  bool _visible = false;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _maybeStart();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HintAnchor old) {
+    super.didUpdateWidget(old);
+    if (widget.lit && !old.lit) _maybeStart();
+  }
+
+  void _maybeStart() {
+    if (!widget.lit || _visible || !RemoveLikeHint.shouldShow) return;
+    _visible = true;
+    RemoveLikeHint.markSeen();
+    _timer?.cancel();
+    _timer = Timer(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _visible = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final show = _visible && widget.lit;
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        widget.child,
+        Positioned(
+          bottom: widget.buttonSize + 10,
+          left: 0,
+          right: 0,
+          child: IgnorePointer(
+            child: OverflowBox(
+              minWidth: 0,
+              maxWidth: 260,
+              minHeight: 0,
+              maxHeight: 60,
+              alignment: Alignment.bottomCenter,
+              child: AnimatedOpacity(
+                opacity: show ? 1 : 0,
+                duration: const Duration(milliseconds: 180),
+                child: Directionality(
+                  textDirection: TextDirection.rtl,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xEE2C2C2E),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      widget.label,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _CircleButton extends StatefulWidget {
   final double size;
   final Color background;
   final Color? border;
   final double scale;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final Widget child;
 
   const _CircleButton({
@@ -203,6 +331,7 @@ class _CircleButton extends StatefulWidget {
     this.border,
     this.scale = 1,
     this.onTap,
+    this.onLongPress,
   });
 
   @override
@@ -229,6 +358,12 @@ class _CircleButtonState extends State<_CircleButton> {
           onTapDown: (_) => _setPressed(true),
           onTapUp: (_) => _setPressed(false),
           onTapCancel: () => _setPressed(false),
+          onLongPress: widget.onLongPress == null
+              ? null
+              : () {
+                  HapticFeedback.mediumImpact();
+                  widget.onLongPress!();
+                },
           onTap: widget.onTap == null
               ? null
               : () {

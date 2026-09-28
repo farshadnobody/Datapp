@@ -8,6 +8,7 @@ import 'screens/onboarding_flow.dart';
 import 'widgets/connection_status_banner.dart';
 import 'network_config.dart';
 import 'push_notifications.dart';
+import 'swipe/remove_like_hint.dart';
 import 'swipe/swipe_onboarding_store.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -24,6 +25,7 @@ void main() async {
 
   // شمارنده‌ی «۲۰ نفر اول» (مرحله‌ی یادگیری سلیقه تو صفحه‌ی Swipe).
   await SwipeOnboarding.load();
+  await RemoveLikeHint.load();
 
   // اگه سرور توکن رو رد کرد (مثلاً منقضی شده)، کاربر رو برمی‌گردونیم به شروع.
   AuthSession.onExpired = () {

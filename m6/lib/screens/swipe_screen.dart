@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import '../api_client.dart';
 import '../models/match_models.dart';
 import '../models/profile_models.dart';
+import '../swipe/remove_like_flow.dart';
 import '../swipe/rewind_memory.dart';
 import '../swipe/swipe_action_bar.dart';
 import '../swipe/swipe_card.dart';
@@ -255,7 +256,10 @@ class _SwipeScreenState extends State<SwipeScreen> {
       _stack = _stack.where((x) => !identical(x, c)).toList();
     });
     // حافظه‌ی Rewind (فقط session، مشترک با اکسپلور).
-    RewindMemory.instance.push(c, dir);
+    // اکشنِ تکراری (مثلاً لایک روی کسی که قبلاً لایک شده) هیچ تغییری تو بک‌اند
+    // نمی‌ده، پس چیزی هم برای Rewind نیست.
+    final pushed = swipeChangesState(c.previousDirection, direction);
+    if (pushed) RewindMemory.instance.push(c, dir);
     if (_stack.length < 5) _loadMore();
     _precacheTop();
     _countOnboarding(direction);
@@ -263,6 +267,9 @@ class _SwipeScreenState extends State<SwipeScreen> {
     RewindMemory.instance
         .enqueue(() => ApiClient.swipe(c.publicId, direction))
         .then((result) {
+      if (!result.changed && pushed) {
+        RewindMemory.instance.discardLatestFor(c.publicId);
+      }
       if (result.matched && result.match != null) {
         // swipeِ منجر به متچ دیگه قابل‌برگشت نیست.
         RewindMemory.instance.discardLatestFor(c.publicId);
@@ -280,17 +287,6 @@ class _SwipeScreenState extends State<SwipeScreen> {
     final finished = SwipeOnboarding.register(direction);
     setState(() => _remaining = SwipeOnboarding.remaining);
     if (finished) HapticFeedback.mediumImpact();
-  }
-
-  bool _canSwipe(DiscoveryCandidate c, SwipeDirection dir) {
-    if (dir == SwipeDirection.up && c.previousDirection == 'super_like') {
-      return false;
-    }
-    return true;
-  }
-
-  void _onBlocked(DiscoveryCandidate c, SwipeDirection dir) {
-    _toast('قبلاً این فرد رو سوپرلایک کردی.');
   }
 
   /// Rewind = برگردوندنِ *آخرین* swipeِ قابل‌برگشت (فقط به‌ترتیبِ معکوسِ
@@ -457,10 +453,35 @@ class _SwipeScreenState extends State<SwipeScreen> {
             interestLabelMap: _interestLabelMap,
             scrollController: scrollController,
             onSwipe: (direction) => _swipeFromDetail(candidate, direction),
+            onRemoveLike: () => _removeLikeFromDetail(candidate),
           ),
         ),
       ),
     );
+  }
+
+  /// نگه داشتنِ دکمه‌ی روشنِ لایک/سوپرلایک روی کارتِ بالا.
+  Future<void> _removeLikeOnTop() async {
+    if (_stack.isEmpty) return;
+    final r = await confirmAndRemoveLike(context, _stack.first);
+    if (!mounted) return;
+    if (r.removed) setState(() {});
+    if (r.message != null) _toast(r.message!);
+  }
+
+  /// همون کار، از تو شیتِ جزئیات (شیت اول بسته می‌شه).
+  Future<void> _removeLikeFromDetail(DiscoveryCandidate candidate) async {
+    Navigator.pop(context);
+    final r = await confirmAndRemoveLike(context, candidate);
+    if (!mounted) return;
+    if (r.removed) {
+      // اگه همون فرد تو Deck هم هست، دکمه‌هاش هم خاموش بشه.
+      for (final x in _stack) {
+        if (x.publicId == candidate.publicId) x.previousDirection = null;
+      }
+      setState(() {});
+    }
+    if (r.message != null) _toast(r.message!);
   }
 
   // لایک/رد/سوپرلایک از تو شیت جزئیات. اگه کارتِ بالای صفحه باشه با همون
@@ -483,27 +504,28 @@ class _SwipeScreenState extends State<SwipeScreen> {
     setState(() {
       _stack = _stack.where((c) => c.publicId != candidate.publicId).toList();
     });
-    RewindMemory.instance.push(
-        candidate,
-        direction == 'like'
-            ? SwipeDirection.right
-            : direction == 'pass'
-                ? SwipeDirection.left
-                : SwipeDirection.up);
+    final pushed = swipeChangesState(candidate.previousDirection, direction);
+    if (pushed) {
+      RewindMemory.instance.push(
+          candidate,
+          direction == 'like'
+              ? SwipeDirection.right
+              : direction == 'pass'
+                  ? SwipeDirection.left
+                  : SwipeDirection.up);
+    }
     try {
       final result = await RewindMemory.instance
           .enqueue(() => ApiClient.swipe(candidate.publicId, direction));
+      if (!result.changed && pushed) {
+        RewindMemory.instance.discardLatestFor(candidate.publicId);
+      }
       if (result.matched && result.match != null) {
         RewindMemory.instance.discardLatestFor(candidate.publicId);
         if (mounted) _showMatchDialog(result.match!);
       }
-    } on ApiException catch (e) {
-      RewindMemory.instance.discardLatestFor(candidate.publicId);
-      if (e.code == 'already_super_liked') {
-        _toast('قبلاً این فرد رو سوپرلایک کردی.');
-      }
     } catch (_) {
-      RewindMemory.instance.discardLatestFor(candidate.publicId);
+      if (pushed) RewindMemory.instance.discardLatestFor(candidate.publicId);
     }
   }
 
@@ -773,8 +795,6 @@ class _SwipeScreenState extends State<SwipeScreen> {
           controller: _deck,
           superLikeEnabled: !_onboarding,
           swipeEnabled: _stack.first.publicId != _lockedId,
-          canSwipe: _canSwipe,
-          onBlocked: _onBlocked,
           onSwiped: _onSwiped,
           itemBuilder: (context, c) => SwipeProfileCard(
             key: ValueKey(c.publicId),
@@ -806,6 +826,10 @@ class _SwipeScreenState extends State<SwipeScreen> {
               progress: _deck.progress,
               extended: !_onboarding,
               canRewind: RewindMemory.instance.canRewind && !_rewinding,
+              likeLit: _stack.isNotEmpty && _stack.first.previousDirection == 'like',
+              superLikeLit:
+                  _stack.isNotEmpty && _stack.first.previousDirection == 'super_like',
+              onRemoveLike: _removeLikeOnTop,
               hideActions: _expandedId != null,
               hideSend: _lockedId != null,
               onPass: () => _deck.swipe(SwipeDirection.left),

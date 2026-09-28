@@ -320,7 +320,8 @@ class DiscoveryCandidate {
   final List<PromptAnswer> prompts;
   final List<Photo> photos;
   final double? distanceKm;
-  final String? previousDirection; // null یعنی هیچ‌وقت swipe نشده
+  // null یعنی هیچ‌وقت swipe نشده. بعد از «برداشتنِ لایک» تو همین session صفر می‌شه.
+  String? previousDirection;
 
   // --- فیلدهای اختیاریِ کارت سبک تیندر ---
   // اگه بک‌اند (Go) این‌ها رو تو JSON بفرسته، روی کارت نشون داده می‌شن؛

@@ -29,10 +29,14 @@ class SwipeResult {
   final bool matched;
   final MatchSummary? match;
 
-  SwipeResult({required this.matched, this.match});
+  /// false یعنی همین اکشن از قبل ثبت شده بود و بک‌اند هیچ چیزی رو تغییر نداد.
+  final bool changed;
+
+  SwipeResult({required this.matched, this.match, this.changed = true});
 
   factory SwipeResult.fromJson(Map<String, dynamic> json) => SwipeResult(
         matched: json['matched'] ?? false,
+        changed: json['changed'] ?? true,
         match: json['match'] != null ? MatchSummary.fromJson(json['match']) : null,
       );
 }

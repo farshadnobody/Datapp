@@ -4,6 +4,7 @@ import '../api_client.dart';
 import '../models/match_models.dart';
 import '../models/profile_models.dart';
 import '../screens/matches_screen.dart';
+import '../swipe/remove_like_flow.dart';
 import '../swipe/rewind_memory.dart';
 import '../swipe/swipe_action_bar.dart';
 import '../swipe/swipe_card.dart';
@@ -200,13 +201,18 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
       _lockedId = null;
       _stack = _stack.where((x) => !identical(x, c)).toList();
     });
-    RewindMemory.instance.push(c, dir); // حافظه‌ی session، مشترک با تب سواپ
+    // اکشنِ تکراری هیچ تغییری تو بک‌اند نمی‌ده، پس چیزی هم برای Rewind نیست.
+    final pushed = swipeChangesState(c.previousDirection, direction);
+    if (pushed) RewindMemory.instance.push(c, dir); // حافظه‌ی session، مشترک با تب سواپ
     if (_stack.length < 5) _loadMore();
     _precacheTop();
 
     RewindMemory.instance
         .enqueue(() => ApiClient.swipe(c.publicId, direction))
         .then((result) {
+      if (!result.changed && pushed) {
+        RewindMemory.instance.discardLatestFor(c.publicId);
+      }
       if (result.matched && result.match != null) {
         RewindMemory.instance.discardLatestFor(c.publicId);
         if (mounted) _showMatchDialog(result.match!);
@@ -214,17 +220,6 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
     }).catchError((_) {
       RewindMemory.instance.discardLatestFor(c.publicId);
     });
-  }
-
-  bool _canSwipe(DiscoveryCandidate c, SwipeDirection dir) {
-    if (dir == SwipeDirection.up && c.previousDirection == 'super_like') {
-      return false;
-    }
-    return true;
-  }
-
-  void _onBlocked(DiscoveryCandidate c, SwipeDirection dir) {
-    _toast('قبلاً این فرد رو سوپرلایک کردی.');
   }
 
   /// همون Rewindِ تب سواپ: آخرین swipeِ قابل‌برگشت (تو کل session)، به‌ترتیبِ
@@ -269,6 +264,15 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
     });
     if (_stack.length < 5) _loadMore();
     _precacheTop();
+  }
+
+  /// نگه داشتنِ دکمه‌ی روشنِ لایک/سوپرلایک روی کارتِ بالا.
+  Future<void> _removeLikeOnTop() async {
+    if (_stack.isEmpty) return;
+    final r = await confirmAndRemoveLike(context, _stack.first);
+    if (!mounted) return;
+    if (r.removed) setState(() {});
+    if (r.message != null) _toast(r.message!);
   }
 
   void _toast(String message) {
@@ -448,8 +452,6 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
           controller: _deck,
           superLikeEnabled: true,
           swipeEnabled: _stack.first.publicId != _lockedId,
-          canSwipe: _canSwipe,
-          onBlocked: _onBlocked,
           onSwiped: _onSwiped,
           itemBuilder: (context, c) => SwipeProfileCard(
             key: ValueKey(c.publicId),
@@ -503,6 +505,10 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
             progress: _deck.progress,
             extended: true,
             canRewind: RewindMemory.instance.canRewind && !_rewinding,
+            likeLit: _stack.isNotEmpty && _stack.first.previousDirection == 'like',
+            superLikeLit:
+                _stack.isNotEmpty && _stack.first.previousDirection == 'super_like',
+            onRemoveLike: _removeLikeOnTop,
             hideActions: _expandedId != null,
             hideSend: _lockedId != null,
             onPass: () => _deck.swipe(SwipeDirection.left),
