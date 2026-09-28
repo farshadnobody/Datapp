@@ -355,21 +355,6 @@ class ApiClient {
     return SwipeResult.fromJson(data);
   }
 
-  /// POST /api/discovery/rewind {public_id}
-  /// آخرین swipeِ قابل‌برگشت رو تو بک‌اند برمی‌گردونه (فقط به‌ترتیبِ معکوسِ
-  /// زمانی). public_id باید همون کسی باشه که سرِ استکِ حافظه‌ی session‌ه؛
-  /// در غیر این‌صورت بک‌اند 409 `rewind_not_latest` می‌ده. جواب: وضعیتِ
-  /// برگشته‌شده (`null` یعنی قبلش هیچ تعاملی نبوده).
-  static Future<String?> rewind(String publicId) async {
-    final response =
-        await _post('/api/discovery/rewind', {'public_id': publicId}, authenticated: true);
-    final data = jsonDecode(response.body);
-    if (response.statusCode != 200) {
-      throw ApiException(data['error'] ?? 'unknown_error');
-    }
-    return data['restored_direction'] as String?;
-  }
-
   static Future<List<MatchSummary>> fetchMatches() async {
     final response = await _get('/api/matches', authenticated: true);
     if (response.statusCode != 200) {
@@ -408,19 +393,6 @@ class ApiClient {
       throw ApiException(data['error'] ?? 'unknown_error');
     }
     return LikesSummary.fromJson(jsonDecode(response.body));
-  }
-
-  /// GET /api/likes/list
-  /// جواب: آرایه‌ای از پروفایلِ کامل + is_super_like/liked_at — برای گریدِ
-  /// صفحه‌ی «لایک‌ها» (نه فقط شمارش خام مثل fetchLikesSummary).
-  static Future<List<Map<String, dynamic>>> fetchLikesList() async {
-    final response = await _get('/api/likes/list', authenticated: true);
-    if (response.statusCode != 200) {
-      final data = jsonDecode(response.body);
-      throw ApiException(data['error'] ?? 'unknown_error');
-    }
-    final list = jsonDecode(response.body) as List;
-    return list.cast<Map<String, dynamic>>();
   }
 
   /// POST /api/matches/unmatch  {public_id}

@@ -521,11 +521,6 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // فقط وقتی بک‌اند تأیید کرده (super_liked_me) این آدم واقعاً سوپرلایکمون کرده.
-        if (c.superLikedMe) ...[
-          IgnorePointer(child: _fade(const _SuperLikedYouPill())),
-          const SizedBox(height: 6),
-        ],
         if (_pillLabel(c.activityStatus) != null)
           IgnorePointer(child: _fade(_StatusPill(status: c.activityStatus!))),
         const SizedBox(height: 8),
@@ -746,39 +741,6 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
 // -----------------------------------------------------------------------
 // اجزای کوچیک
 // -----------------------------------------------------------------------
-
-/// نشونه‌ی «این فرد تو رو سوپرلایک کرده» — همون زبانِ بصریِ پیل‌های کارت
-/// (گرد، متن ۱۴)، با رنگِ آبیِ سوپرلایک و ستاره.
-class _SuperLikedYouPill extends StatelessWidget {
-  const _SuperLikedYouPill();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: SwipeColors.superLike,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.star_rounded, size: 16, color: Colors.white),
-          SizedBox(width: 5),
-          Text(
-            'این فرد تو رو سوپرلایک کرده',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              height: 1.25,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _StatusPill extends StatelessWidget {
   final String status;

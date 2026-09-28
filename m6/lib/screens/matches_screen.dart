@@ -66,7 +66,6 @@ class _MatchesScreenState extends State<MatchesScreen> {
                   name: m.name,
                   photoUrl: m.photoUrl,
                   matchedAt: m.matchedAt,
-                  state: m.state,
                 ))
             .toList();
       }
@@ -132,12 +131,9 @@ class _MatchesScreenState extends State<MatchesScreen> {
     }
 
     final all = _filtered;
-    // جدا کردنِ «متچ‌های جدید» از «مکالمه‌های فعال» از روی state بک‌اند
-    // (new_match / active)، نه از روی این‌که پیامی تو لیست هست یا نه.
-    final newMatches = all.where((c) => c.isNewMatch).toList();
-    final withMessages = all.where((c) => !c.isNewMatch).toList()
-      ..sort((a, b) => (b.lastMessageAt ?? b.matchedAt ?? DateTime(0))
-          .compareTo(a.lastMessageAt ?? a.matchedAt ?? DateTime(0)));
+    final newMatches = all.where((c) => !c.hasMessages).toList();
+    final withMessages = all.where((c) => c.hasMessages).toList()
+      ..sort((a, b) => (b.lastMessageAt ?? DateTime(0)).compareTo(a.lastMessageAt ?? DateTime(0)));
 
     return RefreshIndicator(
       onRefresh: _load,

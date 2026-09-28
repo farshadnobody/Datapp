@@ -49,10 +49,6 @@ class _ChatScreenState extends State<ChatScreen> {
         _scrollToBottom();
       }
     } catch (e) {
-      if (e is ApiException && e.code == 'not_matched') {
-        _closeBecauseUnmatched();
-        return;
-      }
       if (mounted) {
         setState(() {
           _error = 'دریافت پیام‌ها با مشکل مواجه شد.';
@@ -71,10 +67,6 @@ class _ChatScreenState extends State<ChatScreen> {
         (event) {
           try {
             final data = jsonDecode(event);
-            if (data['type'] == 'unmatched' && data['from'] == widget.match.publicId) {
-              _closeBecauseUnmatched();
-              return;
-            }
             if (data['type'] == 'message' && data['from'] == widget.match.publicId) {
               setState(() {
                 _messages = [
@@ -110,18 +102,6 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  bool _closing = false;
-
-  /// مکالمه تو بک‌اند بسته شده (Unmatch از هر طرف) → چت رو می‌بندیم و لیست رو
-  /// رفرش می‌کنه (matches_screen بعد از pop دوباره لود می‌کنه).
-  void _closeBecauseUnmatched() {
-    if (_closing || !mounted) return;
-    _closing = true;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('این متچ دیگه فعال نیست.')));
-    Navigator.of(context).maybePop();
-  }
-
   Future<void> _send() async {
     final text = _controller.text.trim();
     if (text.isEmpty || _sending) return;
@@ -139,11 +119,6 @@ class _ChatScreenState extends State<ChatScreen> {
       await ApiClient.sendMessage(widget.match.publicId, text);
     } catch (e) {
       setState(() => _messages = _messages.where((m) => m != optimistic).toList());
-      if (e is ApiException && e.code == 'not_matched') {
-        // یکی از دو طرف آنمتچ کرده؛ مکالمه دیگه تو بک‌اند بسته‌ست.
-        _closeBecauseUnmatched();
-        return;
-      }
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('ارسال پیام با مشکل مواجه شد.')));

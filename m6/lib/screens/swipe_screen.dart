@@ -4,7 +4,6 @@ import 'package:geolocator/geolocator.dart';
 import '../api_client.dart';
 import '../models/match_models.dart';
 import '../models/profile_models.dart';
-import '../swipe/rewind_memory.dart';
 import '../swipe/swipe_action_bar.dart';
 import '../swipe/swipe_card.dart';
 import '../swipe/swipe_deck.dart';
@@ -34,6 +33,12 @@ class SwipeScreen extends StatefulWidget {
   State<SwipeScreen> createState() => _SwipeScreenState();
 }
 
+class _SwipeRecord {
+  final DiscoveryCandidate candidate;
+  final SwipeDirection direction;
+  _SwipeRecord(this.candidate, this.direction);
+}
+
 class _SwipeScreenState extends State<SwipeScreen> {
   /// شعاع تب «نزدیک» (کیلومتر).
   static const double _nearbyKm = 30;
@@ -42,7 +47,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
 
   List<DiscoveryCandidate> _stack = [];
   final Set<String> _excluded = {};
-  bool _rewinding = false;
+  final List<_SwipeRecord> _history = [];
 
   ProfileOptions? _options;
   Set<String> _myInterests = {};
@@ -74,17 +79,11 @@ class _SwipeScreenState extends State<SwipeScreen> {
   @override
   void initState() {
     super.initState();
-    RewindMemory.instance.addListener(_onRewindMemoryChanged);
     _init();
-  }
-
-  void _onRewindMemoryChanged() {
-    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    RewindMemory.instance.removeListener(_onRewindMemoryChanged);
     _deck.dispose();
     super.dispose();
   }
@@ -253,25 +252,19 @@ class _SwipeScreenState extends State<SwipeScreen> {
       _expandedId = null;
       _lockedId = null;
       _stack = _stack.where((x) => !identical(x, c)).toList();
+      _history.add(_SwipeRecord(c, dir));
+      if (_history.length > 10) _history.removeAt(0);
     });
-    // حافظه‌ی Rewind (فقط session، مشترک با اکسپلور).
-    RewindMemory.instance.push(c, dir);
     if (_stack.length < 5) _loadMore();
     _precacheTop();
     _countOnboarding(direction);
 
-    RewindMemory.instance
-        .enqueue(() => ApiClient.swipe(c.publicId, direction))
-        .then((result) {
-      if (result.matched && result.match != null) {
-        // swipeِ منجر به متچ دیگه قابل‌برگشت نیست.
-        RewindMemory.instance.discardLatestFor(c.publicId);
-        if (mounted) _showMatchDialog(result.match!);
+    ApiClient.swipe(c.publicId, direction).then((result) {
+      if (result.matched && result.match != null && mounted) {
+        _showMatchDialog(result.match!);
       }
     }).catchError((_) {
-      // ثبت swipe شکست خورد (شبکه/رد شدن تو بک‌اند)؛ چیزی تو تاریخچه‌ی بک‌اند
-      // نیست، پس رکوردِ Rewindش رو هم برمی‌داریم.
-      RewindMemory.instance.discardLatestFor(c.publicId);
+      // ثبت swipe شکست خورد؛ چیز حیاتی‌ای از دست نرفته.
     });
   }
 
@@ -293,40 +286,19 @@ class _SwipeScreenState extends State<SwipeScreen> {
     _toast('قبلاً این فرد رو سوپرلایک کردی.');
   }
 
-  /// Rewind = برگردوندنِ *آخرین* swipeِ قابل‌برگشت (فقط به‌ترتیبِ معکوسِ
-  /// زمانی؛ هیچ لیستی برای انتخابِ دلخواه نیست). اول بک‌اند وضعیتِ قبلی رو
-  /// برمی‌گردونه (لایک/رد/سوپرلایک → وضعیتِ قبلش یا هیچ)، بعد کارت به
-  /// Deck برمی‌گرده تا کاربر بتونه اکشنِ دیگه‌ای بزنه.
-  Future<void> _rewind() async {
-    final memory = RewindMemory.instance;
-    final last = memory.latest;
-    if (last == null || _deck.isFlying || _rewinding) return;
-    _rewinding = true;
-    try {
-      await memory.enqueue(() => ApiClient.rewind(last.candidate.publicId));
-      memory.remove(last);
-      if (!mounted) return;
-      _excluded.remove(last.candidate.publicId);
-      _deck.prepareRewind(last.direction);
-      setState(() {
-        _expandedId = null;
-        _lockedId = null;
-        _stack = [
-          last.candidate,
-          ..._stack.where((x) => x.publicId != last.candidate.publicId),
-        ];
-      });
-    } on ApiException catch (e) {
-      if (e.code == 'rewind_unavailable' || e.code == 'rewind_not_latest') {
-        memory.remove(last);
-        _toast('این حرکت دیگه قابل برگشت نیست.');
-      } else {
-        _toast('برگردوندن انجام نشد.');
-      }
-    } catch (_) {
-      _toast('ارتباط با سرور برقرار نشد.');
-    } finally {
-      _rewinding = false;
+  void _rewind() {
+    if (_history.isEmpty || _deck.isFlying) return;
+    final last = _history.removeLast();
+    _excluded.remove(last.candidate.publicId);
+    _deck.prepareRewind(last.direction);
+    setState(() {
+      _expandedId = null;
+      _lockedId = null;
+      _stack = [last.candidate, ..._stack];
+    });
+    // لایک/سوپرلایکِ ثبت‌شده رو برمی‌داریم؛ برای «رد» endpoint جدایی نیست.
+    if (last.direction != SwipeDirection.left) {
+      ApiClient.removeLike(last.candidate.publicId).catchError((_) {});
     }
   }
 
@@ -483,28 +455,16 @@ class _SwipeScreenState extends State<SwipeScreen> {
     setState(() {
       _stack = _stack.where((c) => c.publicId != candidate.publicId).toList();
     });
-    RewindMemory.instance.push(
-        candidate,
-        direction == 'like'
-            ? SwipeDirection.right
-            : direction == 'pass'
-                ? SwipeDirection.left
-                : SwipeDirection.up);
     try {
-      final result = await RewindMemory.instance
-          .enqueue(() => ApiClient.swipe(candidate.publicId, direction));
-      if (result.matched && result.match != null) {
-        RewindMemory.instance.discardLatestFor(candidate.publicId);
-        if (mounted) _showMatchDialog(result.match!);
+      final result = await ApiClient.swipe(candidate.publicId, direction);
+      if (result.matched && result.match != null && mounted) {
+        _showMatchDialog(result.match!);
       }
     } on ApiException catch (e) {
-      RewindMemory.instance.discardLatestFor(candidate.publicId);
       if (e.code == 'already_super_liked') {
         _toast('قبلاً این فرد رو سوپرلایک کردی.');
       }
-    } catch (_) {
-      RewindMemory.instance.discardLatestFor(candidate.publicId);
-    }
+    } catch (_) {}
   }
 
   void _openSearch() {
@@ -805,7 +765,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
               key: ValueKey<bool>(_onboarding),
               progress: _deck.progress,
               extended: !_onboarding,
-              canRewind: RewindMemory.instance.canRewind && !_rewinding,
+              canRewind: _history.isNotEmpty,
               hideActions: _expandedId != null,
               hideSend: _lockedId != null,
               onPass: () => _deck.swipe(SwipeDirection.left),

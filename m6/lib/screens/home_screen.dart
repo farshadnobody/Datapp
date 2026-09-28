@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../swipe/swipe_style.dart';
 import 'explore_screen.dart';
-import 'likes_screen.dart';
 import 'matches_screen.dart';
 import 'profile_home_screen.dart';
 import 'swipe_screen.dart';
@@ -32,7 +31,6 @@ class _HomeScreenState extends State<HomeScreen> {
   int _index = _swipeTab;
   final Set<int> _visited = {_swipeTab};
   int _chatRefresh = 0;
-  int _likesRefresh = 0;
 
   // هنوز API‌ای برای «کی لایکم کرده» / «اکسپلور» نداریم؛ وقتی اضافه شد
   // این دو مقدار رو وصل کن تا نشونه‌ی قرمز نوار پایین (مثل تیندر) نشون داده بشه.
@@ -46,7 +44,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _index = i;
       _visited.add(i);
       if (i == _chatTab) _chatRefresh++; // متچ‌های جدید دوباره لود بشن
-      if (i == _likesTab) _likesRefresh++; // لایک‌ها دوباره از بک‌اند لود بشن
     });
   }
 
@@ -74,11 +71,10 @@ class _HomeScreenState extends State<HomeScreen> {
               _lazy(1, () => const ExploreScreen()),
               _lazy(
                 2,
-                () => Theme(
-                  data: ThemeData.dark().copyWith(
-                    scaffoldBackgroundColor: Colors.black,
-                  ),
-                  child: LikesScreen(key: ValueKey<int>(_likesRefresh)),
+                () => const _ComingSoonTab(
+                  icon: Icons.favorite_border,
+                  title: 'لایک‌ها',
+                  subtitle: 'به‌زودی می‌تونی ببینی کی لایکت کرده.',
                 ),
               ),
               _lazy(
@@ -255,6 +251,49 @@ class _NavItem extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// -----------------------------------------------------------------------
+// تب‌های ساده
+// -----------------------------------------------------------------------
+
+class _ComingSoonTab extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  const _ComingSoonTab({required this.icon, required this.title, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 56, color: const Color(0xFF6E6E72)),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Color(0xFFBDBDBD), fontSize: 15, height: 1.5),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
