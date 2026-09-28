@@ -4,6 +4,7 @@ import '../api_client.dart';
 import '../models/match_models.dart';
 import '../models/profile_models.dart';
 import '../screens/matches_screen.dart';
+import '../swipe/rewind_memory.dart';
 import '../swipe/swipe_action_bar.dart';
 import '../swipe/swipe_card.dart';
 import '../swipe/swipe_deck.dart';
@@ -27,12 +28,6 @@ class ExploreCategoryScreen extends StatefulWidget {
   State<ExploreCategoryScreen> createState() => _ExploreCategoryScreenState();
 }
 
-class _SwipeRecord {
-  final DiscoveryCandidate candidate;
-  final SwipeDirection direction;
-  _SwipeRecord(this.candidate, this.direction);
-}
-
 class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
   static const int _pageLimit = 30;
   static const int _maxRoundsPerLoad = 6;
@@ -41,7 +36,12 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
 
   List<DiscoveryCandidate> _stack = [];
   final Set<String> _fetched = {}; // همه‌ی publicId هایی که تا الان از سرور اومدن
-  final List<_SwipeRecord> _history = [];
+  bool _rewinding = false;
+
+  /// حالت «دوباره ببین»: بعد از دیدنِ همه‌ی پروفایل‌های دسته، با همون
+  /// /api/discovery (mode=all) دوباره نشون داده می‌شن. هیچ تعاملی خودکار ثبت
+  /// نمی‌شه — فقط وقتی کاربر خودش لایک/رد/سوپرلایک بزنه (upsert، بدون تکرار).
+  bool _seeingAgain = false;
 
   ProfileOptions? _options;
   Set<String> _myInterests = {};
@@ -58,11 +58,17 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
   @override
   void initState() {
     super.initState();
+    RewindMemory.instance.addListener(_onRewindMemoryChanged);
     _init();
+  }
+
+  void _onRewindMemoryChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    RewindMemory.instance.removeListener(_onRewindMemoryChanged);
     _deck.dispose();
     super.dispose();
   }
@@ -105,6 +111,7 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
         final page = await ApiClient.fetchDiscovery(
           limit: _pageLimit,
           exclude: _fetched.toList(),
+          includeSwiped: _seeingAgain,
         );
         if (gen != _generation) return;
         rounds++;
@@ -155,6 +162,12 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
     _loadMore();
   }
 
+  void _seeAgain() {
+    HapticFeedback.lightImpact();
+    _seeingAgain = true;
+    _reload();
+  }
+
   void _precacheTop() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -181,21 +194,26 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
   }
 
   void _onSwiped(DiscoveryCandidate c, SwipeDirection dir) {
+    final direction = _dirName(dir);
     setState(() {
       _expandedId = null;
       _lockedId = null;
       _stack = _stack.where((x) => !identical(x, c)).toList();
-      _history.add(_SwipeRecord(c, dir));
-      if (_history.length > 10) _history.removeAt(0);
     });
+    RewindMemory.instance.push(c, dir); // حافظه‌ی session، مشترک با تب سواپ
     if (_stack.length < 5) _loadMore();
     _precacheTop();
 
-    ApiClient.swipe(c.publicId, _dirName(dir)).then((result) {
-      if (result.matched && result.match != null && mounted) {
-        _showMatchDialog(result.match!);
+    RewindMemory.instance
+        .enqueue(() => ApiClient.swipe(c.publicId, direction))
+        .then((result) {
+      if (result.matched && result.match != null) {
+        RewindMemory.instance.discardLatestFor(c.publicId);
+        if (mounted) _showMatchDialog(result.match!);
       }
-    }).catchError((_) {});
+    }).catchError((_) {
+      RewindMemory.instance.discardLatestFor(c.publicId);
+    });
   }
 
   bool _canSwipe(DiscoveryCandidate c, SwipeDirection dir) {
@@ -209,17 +227,37 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
     _toast('قبلاً این فرد رو سوپرلایک کردی.');
   }
 
-  void _rewind() {
-    if (_history.isEmpty || _deck.isFlying) return;
-    final last = _history.removeLast();
-    _deck.prepareRewind(last.direction);
-    setState(() {
-      _expandedId = null;
-      _lockedId = null;
-      _stack = [last.candidate, ..._stack];
-    });
-    if (last.direction != SwipeDirection.left) {
-      ApiClient.removeLike(last.candidate.publicId).catchError((_) {});
+  /// همون Rewindِ تب سواپ: آخرین swipeِ قابل‌برگشت (تو کل session)، به‌ترتیبِ
+  /// معکوسِ زمانی؛ اول بک‌اند وضعیتِ قبلی رو برمی‌گردونه، بعد کارت برمی‌گرده.
+  Future<void> _rewind() async {
+    final memory = RewindMemory.instance;
+    final last = memory.latest;
+    if (last == null || _deck.isFlying || _rewinding) return;
+    _rewinding = true;
+    try {
+      await memory.enqueue(() => ApiClient.rewind(last.candidate.publicId));
+      memory.remove(last);
+      if (!mounted) return;
+      _deck.prepareRewind(last.direction);
+      setState(() {
+        _expandedId = null;
+        _lockedId = null;
+        _stack = [
+          last.candidate,
+          ..._stack.where((x) => x.publicId != last.candidate.publicId),
+        ];
+      });
+    } on ApiException catch (e) {
+      if (e.code == 'rewind_unavailable' || e.code == 'rewind_not_latest') {
+        memory.remove(last);
+        _toast('این حرکت دیگه قابل برگشت نیست.');
+      } else {
+        _toast('برگردوندن انجام نشد.');
+      }
+    } catch (_) {
+      _toast('ارتباط با سرور برقرار نشد.');
+    } finally {
+      _rewinding = false;
     }
   }
 
@@ -307,17 +345,24 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
   @override
   Widget build(BuildContext context) {
     final topPad = MediaQuery.of(context).padding.top;
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned.fill(
-            top: topPad + SwipeMetrics.headerHeight,
-            child: _buildDeckArea(),
-          ),
-          Positioned(top: topPad, left: 0, right: 0, child: _buildHeader()),
-        ],
+    // ریشه‌ی «چپ‌چین‌بودنِ اسمِ کارت» تو اکسپلور: این صفحه با Navigator.push
+    // باز می‌شه و خارج از Directionalityِ rtl ی HomeScreen قرار می‌گیره؛ پس
+    // ویجت‌های start-aligned ی کارت (اسم، سن، بج‌ها، بلوک‌های اطلاعات) LTR
+    // می‌شدن. با همون kSwipeTextDirection ی تب سواپ، دقیقاً همون چیدمان.
+    return Directionality(
+      textDirection: kSwipeTextDirection,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              top: topPad + SwipeMetrics.headerHeight,
+              child: _buildDeckArea(),
+            ),
+            Positioned(top: topPad, left: 0, right: 0, child: _buildHeader()),
+          ],
+        ),
       ),
     );
   }
@@ -371,11 +416,26 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
       );
     }
     if (_stack.isEmpty) {
+      if (_seeingAgain) {
+        return _centerMessage(
+          icon: widget.category.icon,
+          title: 'کسی تو این دسته پیدا نشد.',
+          subtitle: 'بعداً دوباره سر بزن، یا شعاعِ فاصله‌ت رو تو تنظیماتِ سواپ زیاد کن.',
+          actions: [_pillButton('تلاش دوباره', _reload)],
+        );
+      }
       return _centerMessage(
         icon: widget.category.icon,
-        title: 'فعلاً کسی تو این دسته پیدا نشد.',
-        subtitle: 'بعداً دوباره سر بزن، یا شعاعِ فاصله‌ت رو تو تنظیماتِ سواپ زیاد کن.',
-        actions: [_pillButton('تلاش دوباره', _reload)],
+        title: 'همه‌ی پروفایل‌های این دسته رو دیدی.',
+        subtitle: 'می‌تونی دوباره ببینیشون؛ اینکار چیزی رو تغییر نمی‌ده مگه خودت لایک/رد کنی.',
+        actions: [
+          _pillButton('دوباره ببین', _seeAgain),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: _reload,
+            child: const Text('تلاش دوباره', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       );
     }
 
@@ -409,6 +469,32 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
             },
           ),
         ),
+        if (_seeingAgain)
+          Positioned(
+            top: 8,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xCC1C1C1E),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.replay, size: 15, color: Colors.white),
+                      SizedBox(width: 6),
+                      Text('دوباره داری این پروفایل‌ها رو می‌بینی',
+                          style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         Positioned(
           left: 0,
           right: 0,
@@ -416,7 +502,7 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
           child: SwipeActionBar(
             progress: _deck.progress,
             extended: true,
-            canRewind: _history.isNotEmpty,
+            canRewind: RewindMemory.instance.canRewind && !_rewinding,
             hideActions: _expandedId != null,
             hideSend: _lockedId != null,
             onPass: () => _deck.swipe(SwipeDirection.left),

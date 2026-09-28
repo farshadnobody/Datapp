@@ -1,3 +1,4 @@
+import 'swipe/rewind_memory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'swipe/swipe_onboarding_store.dart';
 
@@ -55,6 +56,7 @@ class AuthSession {
   }
 
   static Future<void> clear() async {
+    RewindMemory.instance.clear(); // حافظه‌ی Rewind فقط مالِ همین session/حساب‌ـه
     token = null;
     phone = null;
     hasProfile = false;
