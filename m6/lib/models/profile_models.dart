@@ -333,6 +333,11 @@ class DiscoveryCandidate {
   final String? wantChildren; // مثلاً "want_children" — برای دسته‌ی «بچه می‌خوام» تو اکسپلور
   final bool verified; // برای دسته‌ی «تأیید عکس» تو اکسپلور؛ اگه بک‌اند نفرسته false می‌مونه
 
+  /// true فقط وقتی بک‌اند تأیید کرده که این آدم واقعاً (تو دیتابیس) کاربرِ فعلی رو
+  /// سوپرلایک کرده و هنوز متچ/آنمتچ/بلاکی نیست. هیچ‌وقت از استیت لوکال ساخته
+  /// نمی‌شه.
+  final bool superLikedMe;
+
   DiscoveryCandidate({
     required this.publicId,
     required this.name,
@@ -350,6 +355,7 @@ class DiscoveryCandidate {
     this.activityStatus,
     this.wantChildren,
     this.verified = false,
+    this.superLikedMe = false,
   });
 
   factory DiscoveryCandidate.fromJson(Map<String, dynamic> json) =>
@@ -376,6 +382,7 @@ class DiscoveryCandidate {
         activityStatus: _activityFrom(json),
         wantChildren: json['want_children'] as String?,
         verified: json['verified'] ?? false,
+        superLikedMe: json['super_liked_me'] ?? false,
       );
 
   // اگه بک‌اند مستقیم `activity_status` بفرسته همون رو می‌گیریم؛ وگرنه از

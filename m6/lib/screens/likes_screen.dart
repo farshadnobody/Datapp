@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../api_client.dart';
 import '../likes/likes_data.dart';
 
 /// تب «لایک‌ها» — دقیقاً شبیهِ صفحه‌ی Likes You تیندر:
@@ -69,8 +70,45 @@ class _LikesScreenState extends State<LikesScreen> {
       MaterialPageRoute(builder: (_) => _LikeProfileDetail(entry: entry)),
     );
     if (liked == null) return;
-    setState(() => _likes.remove(entry));
-    if (liked && mounted) _showMatchDialog(entry);
+
+    // منبع حقیقت بک‌اندِ: لایک/رد *واقعاً* ثبت می‌شه (قبلاً فقط لوکال بود و
+    // «متچ» فیک نشون داده می‌شد). فقط بعد از جوابِ سرور لیست عوض می‌شه.
+    try {
+      final result = await ApiClient.swipe(entry.candidate.publicId, liked ? 'like' : 'pass');
+      if (!mounted) return;
+      setState(() => _likes.remove(entry));
+      if (result.matched) {
+        // لایکِ pending الان تبدیل به متچ شده (از Likes You حذف شد).
+        _showMatchDialog(entry);
+      }
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      if (e.code == 'already_matched' || e.code == 'profile_not_found') {
+        await _refresh(); // وضعیت تو بک‌اند عوض شده؛ لیست رو از سرور می‌گیریم.
+      } else {
+        _toast('ثبت انجام نشد. دوباره تلاش کن.');
+      }
+    } catch (_) {
+      if (mounted) _toast('ارتباط با سرور برقرار نشد.');
+    }
+  }
+
+  Future<void> _refresh() async {
+    try {
+      final fresh = await fetchLikesYou();
+      if (!mounted) return;
+      setState(() {
+        _likes
+          ..clear()
+          ..addAll(fresh);
+      });
+    } catch (_) {}
+  }
+
+  void _toast(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 2)));
   }
 
   void _showMatchDialog(LikeEntry entry) {
@@ -135,6 +173,8 @@ class _LikesScreenState extends State<LikesScreen> {
             if (_likes.isEmpty) {
               return _EmptyLikes(topPad: topPad);
             }
+            final superLikes = _likes.where((e) => e.isSuperLike).toList();
+            final normalLikes = _likes.where((e) => !e.isSuperLike).toList();
             return CustomScrollView(
               slivers: [
                 SliverPadding(
@@ -165,20 +205,72 @@ class _LikesScreenState extends State<LikesScreen> {
                       child: _UpgradeBanner(onTap: _showPaywallSheet),
                     ),
                   ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                  sliver: SliverToBoxAdapter(
-                    child: _MasonryLikesGrid(
-                      entries: _likes,
-                      isPremium: widget.isPremium,
-                      onTap: _onTapCard,
+                // سوپرلایک‌ها جدا از لایک‌های معمولی (بک‌اند is_super_like رو
+                // می‌فرسته). وقتی متچ بشن، خودشون از این دو لیست حذف می‌شن.
+                if (superLikes.isNotEmpty) ...[
+                  const SliverToBoxAdapter(
+                    child: _SectionHeader(
+                      icon: Icons.star_rounded,
+                      color: Color(0xFF3D9CF0),
+                      title: 'سوپرلایک‌ها',
                     ),
                   ),
-                ),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                    sliver: SliverToBoxAdapter(
+                      child: _MasonryLikesGrid(
+                        entries: superLikes,
+                        isPremium: widget.isPremium,
+                        onTap: _onTapCard,
+                      ),
+                    ),
+                  ),
+                ],
+                if (normalLikes.isNotEmpty) ...[
+                  const SliverToBoxAdapter(
+                    child: _SectionHeader(
+                      icon: Icons.favorite_rounded,
+                      color: Color(0xFFFFC629),
+                      title: 'لایک‌ها',
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                    sliver: SliverToBoxAdapter(
+                      child: _MasonryLikesGrid(
+                        entries: normalLikes,
+                        isPremium: widget.isPremium,
+                        onTap: _onTapCard,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  const _SectionHeader({required this.icon, required this.color, required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 8),
+          Text(title,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+        ],
       ),
     );
   }
