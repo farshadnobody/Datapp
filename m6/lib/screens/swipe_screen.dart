@@ -830,6 +830,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
               superLikeLit:
                   _stack.isNotEmpty && _stack.first.previousDirection == 'super_like',
               onRemoveLike: _removeLikeOnTop,
+              litToken: _stack.isNotEmpty ? _stack.first.publicId : null,
               hideActions: _expandedId != null,
               hideSend: _lockedId != null,
               onPass: () => _deck.swipe(SwipeDirection.left),

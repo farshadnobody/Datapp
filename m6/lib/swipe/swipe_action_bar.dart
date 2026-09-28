@@ -25,6 +25,9 @@ class SwipeActionBar extends StatelessWidget {
   /// نگه داشتنِ طولانیِ دکمه‌ی روشنِ لایک/سوپرلایک → برداشتنِ لایک (با تأیید).
   final VoidCallback? onRemoveLike;
 
+  /// شناسه‌ی کارتِ بالا؛ با عوض شدنش افکتِ «از قبل لایک شده» دوباره پخش می‌شه.
+  final String? litToken;
+
   /// true → ضربدر/ستاره/قلب/واگرد با محو و کوچیک شدن هاید می‌شن (دکمه‌ی ارسال
   /// سر جاش می‌مونه). وقتی اطلاعاتِ پروفایل باز شده استفاده می‌شه.
   final bool hideActions;
@@ -46,6 +49,7 @@ class SwipeActionBar extends StatelessWidget {
     this.likeLit = false,
     this.superLikeLit = false,
     this.onRemoveLike,
+    this.litToken,
     this.hideActions = false,
     this.hideSend = false,
     required this.onPass,
@@ -147,6 +151,8 @@ class SwipeActionBar extends StatelessWidget {
         final filled = filledRest || t > 0.7;
         return _HintAnchor(
           lit: likeLit && onRemoveLike != null,
+          token: litToken,
+          color: SwipeColors.like,
           buttonSize: size,
           label: 'نگه دار تا لایک برداشته بشه',
           child: _CircleButton(
@@ -172,6 +178,8 @@ class SwipeActionBar extends StatelessWidget {
         final fg = Color.lerp(SwipeColors.superLikeSoft, Colors.white, t)!;
         return _HintAnchor(
           lit: superLikeLit && onRemoveLike != null,
+          token: litToken,
+          color: SwipeColors.superLike,
           buttonSize: SwipeMetrics.smallButton,
           label: 'نگه دار تا سوپرلایک برداشته بشه',
           child: _CircleButton(
@@ -218,11 +226,15 @@ class SwipeActionBar extends StatelessWidget {
 /// (وضعیتش با [RemoveLikeHint] روی گوشی ذخیره می‌شه).
 class _HintAnchor extends StatefulWidget {
   final bool lit;
+  final String? token;
+  final Color color;
   final double buttonSize;
   final String label;
   final Widget child;
   const _HintAnchor({
     required this.lit,
+    required this.token,
+    required this.color,
     required this.buttonSize,
     required this.label,
     required this.child,
@@ -232,19 +244,30 @@ class _HintAnchor extends StatefulWidget {
   State<_HintAnchor> createState() => _HintAnchorState();
 }
 
-class _HintAnchorState extends State<_HintAnchor> {
+class _HintAnchorState extends State<_HintAnchor> with SingleTickerProviderStateMixin {
   bool _visible = false;
   Timer? _timer;
+
+  // افکتِ «از قبل لایک شده»: حلقه‌ای که از دکمه پخش و محو می‌شه + یه درخششِ
+  // ثابت دورِ دکمه. عمداً با افکتِ فشردن/کشیدن (پر شدنِ رنگ) فرق داره.
+  late final AnimationController _ring = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
 
   @override
   void initState() {
     super.initState();
+    if (widget.lit) _ring.forward(from: 0);
     _maybeStart();
   }
 
   @override
   void didUpdateWidget(covariant _HintAnchor old) {
     super.didUpdateWidget(old);
+    if (widget.lit && (!old.lit || widget.token != old.token)) {
+      _ring.forward(from: 0);
+    }
     if (widget.lit && !old.lit) _maybeStart();
   }
 
@@ -261,6 +284,7 @@ class _HintAnchorState extends State<_HintAnchor> {
   @override
   void dispose() {
     _timer?.cancel();
+    _ring.dispose();
     super.dispose();
   }
 
@@ -271,7 +295,50 @@ class _HintAnchorState extends State<_HintAnchor> {
       clipBehavior: Clip.none,
       alignment: Alignment.center,
       children: [
-        widget.child,
+        // درخششِ ثابت وقتی روشنه.
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          width: widget.buttonSize,
+          height: widget.buttonSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: widget.lit
+                ? [
+                    BoxShadow(
+                      color: widget.color.withOpacity(0.55),
+                      blurRadius: 16,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : const [],
+          ),
+          child: widget.child,
+        ),
+        // حلقه‌ی یک‌بارِ ورود.
+        if (widget.lit)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedBuilder(
+                animation: _ring,
+                builder: (context, _) {
+                  final t = Curves.easeOut.transform(_ring.value);
+                  if (_ring.value == 0 || _ring.value == 1) return const SizedBox.shrink();
+                  return Transform.scale(
+                    scale: 1 + 0.7 * t,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: widget.color.withOpacity(0.8 * (1 - t)),
+                          width: 3,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
         Positioned(
           bottom: widget.buttonSize + 10,
           left: 0,
