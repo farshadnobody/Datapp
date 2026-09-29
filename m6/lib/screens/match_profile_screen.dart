@@ -6,6 +6,7 @@ import '../models/profile_models.dart';
 import '../style/app_colors.dart';
 import '../widgets/discovery_profile_detail_sheet.dart';
 import '../widgets/profile_safety_actions.dart';
+import '../widgets/app_network_image.dart';
 
 /// پروفایلِ کاملِ طرفِ چت — از تپ روی عکس/اسمش تو هدرِ صفحه‌ی چت باز می‌شه.
 /// برخلاف «پیش‌نمایش پروفایلِ من» اینجا اسکرول قفل نیست و فلش صرفاً دکمه‌ی
@@ -242,8 +243,8 @@ class _MatchProfileScreenState extends State<MatchProfileScreen> {
                         child: const Center(child: Icon(Icons.person, size: 96, color: AppDark.muted)),
                       )
                     else
-                      Image.network(urls[_photoIndex.clamp(0, urls.length - 1)],
-                          fit: BoxFit.cover, gaplessPlayback: true),
+                      AppNetworkImage(urls[_photoIndex.clamp(0, urls.length - 1)],
+                          progressive: true, keepOldWhileLoading: true),
                     Positioned.fill(
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,

@@ -34,6 +34,16 @@ class _HomeScreenState extends State<HomeScreen> {
   int _chatRefresh = 0;
   int _likesRefresh = 0;
 
+  // هر بار که کاربر (دوباره) وارد تب سواپ می‌شه یکی زیاد می‌شه؛ صفحه‌ی سواپ
+  // بر اساسش وضعیتِ لوکیشن رو چک می‌کنه (بدون این‌که لیست دوباره لود بشه).
+  final ValueNotifier<int> _swipeEnters = ValueNotifier<int>(0);
+
+  @override
+  void dispose() {
+    _swipeEnters.dispose();
+    super.dispose();
+  }
+
   // هنوز API‌ای برای «کی لایکم کرده» / «اکسپلور» نداریم؛ وقتی اضافه شد
   // این دو مقدار رو وصل کن تا نشونه‌ی قرمز نوار پایین (مثل تیندر) نشون داده بشه.
   final int _likesCount = 0;
@@ -45,6 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _index = i;
       _visited.add(i);
+      if (i == _swipeTab) _swipeEnters.value++;
       if (i == _chatTab) _chatRefresh++; // متچ‌های جدید دوباره لود بشن
       if (i == _likesTab) _likesRefresh++; // لایک‌ها دوباره از بک‌اند لود بشن
     });
@@ -70,7 +81,10 @@ class _HomeScreenState extends State<HomeScreen> {
           body: IndexedStack(
             index: _index,
             children: [
-              SwipeScreen(onOpenMatches: () => _select(_chatTab)),
+              SwipeScreen(
+                onOpenMatches: () => _select(_chatTab),
+                enterSignal: _swipeEnters,
+              ),
               _lazy(1, () => const ExploreScreen()),
               _lazy(
                 2,

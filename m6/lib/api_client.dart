@@ -3,6 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'auth_session.dart';
+import 'connection_monitor.dart';
+import 'http_cache.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'models/profile_models.dart';
 import 'models/match_models.dart';
 import 'models/chat_models.dart';
@@ -45,9 +48,21 @@ class LoginResult {
 }
 
 class ApiClient {
+  // یه اتصالِ مشترک برای همه‌ی درخواست‌ها (keep-alive): به‌جای ساختنِ یه اتصال
+  // (و handshake) برای هر درخواست، اتصال‌ها دوباره استفاده می‌شن.
+  static final http.Client _client = http.Client();
+
+  // شکستِ شبکه رو به ConnectionMonitor خبر می‌ده (نوار «قطع» بدون پولینگ).
+  static NetworkException _networkDown() {
+    ConnectionMonitor.reportFailure();
+    return NetworkException();
+  }
+
   // اگه سرور به یه درخواست احراز‌هویت‌شده 401 بده یعنی توکن منقضی/نامعتبره:
   // session پاک می‌شه و کاربر برمی‌گرده به صفحه‌ی شروع (تو main.dart وصل شده).
   static void _handleUnauthorized(int statusCode, bool authenticated) {
+    // هر جوابی از سرور یعنی اتصال برقراره.
+    ConnectionMonitor.reportSuccess();
     if (authenticated && statusCode == 401) {
       AuthSession.expire();
     }
@@ -60,7 +75,7 @@ class ApiClient {
       headers['Authorization'] = 'Bearer ${AuthSession.token}';
     }
     try {
-      final response = await http
+      final response = await _client
           .post(
             Uri.parse('$backendBaseUrl$path'),
             headers: headers,
@@ -70,11 +85,11 @@ class ApiClient {
       _handleUnauthorized(response.statusCode, authenticated);
       return response;
     } on TimeoutException {
-      throw NetworkException();
+      throw _networkDown();
     } on SocketException {
-      throw NetworkException();
+      throw _networkDown();
     } on http.ClientException {
-      throw NetworkException();
+      throw _networkDown();
     }
   }
 
@@ -85,17 +100,17 @@ class ApiClient {
       headers['Authorization'] = 'Bearer ${AuthSession.token}';
     }
     try {
-      final response = await http
+      final response = await _client
           .get(Uri.parse('$backendBaseUrl$path'), headers: headers)
           .timeout(const Duration(seconds: 10));
       _handleUnauthorized(response.statusCode, authenticated);
       return response;
     } on TimeoutException {
-      throw NetworkException();
+      throw _networkDown();
     } on SocketException {
-      throw NetworkException();
+      throw _networkDown();
     } on http.ClientException {
-      throw NetworkException();
+      throw _networkDown();
     }
   }
 
@@ -134,17 +149,112 @@ class ApiClient {
   // بدونه سرور جواب می‌ده یا نه، به جزئیات پاسخ کاری نداره.
   static Future<bool> checkHealth() async {
     try {
-      final response = await http
+      final response = await _client
           .get(Uri.parse('$backendBaseUrl/api/health'))
           .timeout(const Duration(seconds: 4));
-      return response.statusCode == 200;
+      final ok = response.statusCode == 200;
+      if (ok) {
+        ConnectionMonitor.reportSuccess();
+      } else {
+        ConnectionMonitor.reportFailure();
+      }
+      return ok;
     } catch (_) {
+      ConnectionMonitor.reportFailure();
       return false;
     }
   }
 
+  // GET شرطی با کش: جواب (و ETagش) روی گوشی ذخیره می‌شه و دفعه‌ی بعد با
+  // If-None-Match پرسیده می‌شه؛ اگه چیزی عوض نشده باشه سرور فقط 304 می‌ده (بدون
+  // بدنه). اگه [skipNetworkWithin] داده بشه و کش تازه‌تر از اون باشه، اصلاً
+  // درخواستی نمی‌ره. اگه شبکه قطع باشه و کش داشته باشیم، همون کش برمی‌گرده.
+  static Future<http.Response> _getCached(
+    String path, {
+    required String cacheKey,
+    bool authenticated = false,
+    Duration? skipNetworkWithin,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final base = '${HttpCacheStore.prefix}$cacheKey';
+    final cachedBody = prefs.getString('$base:body');
+    final cachedEtag = prefs.getString('$base:etag');
+    final cachedAt = prefs.getInt('$base:at');
+
+    http.Response fromCache() => http.Response.bytes(
+          utf8.encode(cachedBody!),
+          200,
+          headers: const {'content-type': 'application/json; charset=utf-8'},
+        );
+
+    if (cachedBody != null &&
+        skipNetworkWithin != null &&
+        cachedAt != null &&
+        DateTime.now().millisecondsSinceEpoch - cachedAt <
+            skipNetworkWithin.inMilliseconds) {
+      return fromCache();
+    }
+
+    final headers = <String, String>{};
+    if (authenticated) headers['Authorization'] = 'Bearer ${AuthSession.token}';
+    if (cachedBody != null && cachedEtag != null) {
+      headers['If-None-Match'] = cachedEtag;
+    }
+
+    try {
+      final response = await _client
+          .get(Uri.parse('$backendBaseUrl$path'), headers: headers)
+          .timeout(const Duration(seconds: 10));
+      _handleUnauthorized(response.statusCode, authenticated);
+
+      if (response.statusCode == 304 && cachedBody != null) {
+        await prefs.setInt('$base:at', DateTime.now().millisecondsSinceEpoch);
+        return fromCache();
+      }
+      if (response.statusCode == 200) {
+        final body = utf8.decode(response.bodyBytes);
+        final etag = response.headers['etag'];
+        await prefs.setString('$base:body', body);
+        if (etag != null) {
+          await prefs.setString('$base:etag', etag);
+        } else {
+          await prefs.remove('$base:etag');
+        }
+        await prefs.setInt('$base:at', DateTime.now().millisecondsSinceEpoch);
+        return http.Response.bytes(
+          response.bodyBytes,
+          200,
+          headers: const {'content-type': 'application/json; charset=utf-8'},
+        );
+      }
+      return response;
+    } on TimeoutException {
+      if (cachedBody != null) {
+        ConnectionMonitor.reportFailure();
+        return fromCache();
+      }
+      throw _networkDown();
+    } on SocketException {
+      if (cachedBody != null) {
+        ConnectionMonitor.reportFailure();
+        return fromCache();
+      }
+      throw _networkDown();
+    } on http.ClientException {
+      if (cachedBody != null) {
+        ConnectionMonitor.reportFailure();
+        return fromCache();
+      }
+      throw _networkDown();
+    }
+  }
+
   static Future<ProfileOptions> fetchProfileOptions() async {
-    final response = await _get('/api/profile/options');
+    // هر بار فقط با ETag (= «نسخه‌ی» داده) از سرور می‌پرسه «عوض شده؟». اگه نه، سرور
+    // یه 304 خالی می‌ده و همون کشِ گوشی استفاده می‌شه؛ اگه آره، نسخه‌ی سرور جایگزین
+    // می‌شه (سرور همیشه مرجعه).
+    final response =
+        await _getCached('/api/profile/options', cacheKey: 'options');
     if (response.statusCode != 200) {
       throw ApiException('unknown_error');
     }
@@ -161,7 +271,10 @@ class ApiClient {
   }
 
   static Future<MyProfile> fetchMyProfile() async {
-    final response = await _get('/api/profile/me', authenticated: true);
+    // پروفایلِ خودت: هر بار با ETag پرسیده می‌شه (تغییرِ گوشیِ دیگه هم دیده
+    // می‌شه) ولی وقتی عوض نشده فقط یه 304 خالی جابه‌جا می‌شه.
+    final response = await _getCached('/api/profile/me',
+        cacheKey: 'me:${AuthSession.phone}', authenticated: true);
     if (response.statusCode != 200) {
       final data = jsonDecode(response.body);
       throw ApiException(data['error'] ?? 'unknown_error');
@@ -252,7 +365,7 @@ class ApiClient {
         .add(http.MultipartFile.fromBytes('photo', bytes, filename: filename));
 
     try {
-      final streamed = await request.send().timeout(const Duration(seconds: 30));
+      final streamed = await _client.send(request).timeout(const Duration(seconds: 30));
       final response = await http.Response.fromStream(streamed);
       _handleUnauthorized(response.statusCode, true);
       final data = jsonDecode(response.body);
@@ -261,11 +374,11 @@ class ApiClient {
       }
       return data;
     } on TimeoutException {
-      throw NetworkException();
+      throw _networkDown();
     } on SocketException {
-      throw NetworkException();
+      throw _networkDown();
     } on http.ClientException {
-      throw NetworkException();
+      throw _networkDown();
     }
   }
 
@@ -276,15 +389,15 @@ class ApiClient {
     }
     try {
       final response =
-          await http.get(uri, headers: headers).timeout(const Duration(seconds: 10));
+          await _client.get(uri, headers: headers).timeout(const Duration(seconds: 10));
       _handleUnauthorized(response.statusCode, authenticated);
       return response;
     } on TimeoutException {
-      throw NetworkException();
+      throw _networkDown();
     } on SocketException {
-      throw NetworkException();
+      throw _networkDown();
     } on http.ClientException {
-      throw NetworkException();
+      throw _networkDown();
     }
   }
 

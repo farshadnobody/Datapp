@@ -11,6 +11,7 @@ import '../swipe/swipe_card.dart';
 import '../swipe/swipe_deck.dart';
 import '../swipe/swipe_style.dart';
 import 'explore_data.dart';
+import '../widgets/app_network_image.dart';
 
 /// استکِ سواپِ مخصوصِ یه دسته‌ی اکسپلور — دقیقاً همون رفتارِ تیندر: با تپِ یه
 /// تایل تو Explore، یه صفحه‌ی تمام‌صفحه باز می‌شه که فقط کاندیدهایی که تویِ
@@ -175,7 +176,12 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
       for (final c in _stack.take(3)) {
         if (c.photos.isEmpty) continue;
         precacheImage(
-          NetworkImage('$backendBaseUrl${c.photos.first.url}'),
+          appImageProvider('$backendBaseUrl${c.photos.first.url}'),
+          context,
+          onError: (e, s) {},
+        );
+        precacheImage(
+          appImageProvider(photoThumbUrl('$backendBaseUrl${c.photos.first.url}')),
           context,
           onError: (e, s) {},
         );
@@ -206,6 +212,9 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
     if (pushed) RewindMemory.instance.push(c, dir); // حافظه‌ی session، مشترک با تب سواپ
     if (_stack.length < 5) _loadMore();
     _precacheTop();
+
+    // اکشنِ بی‌اثر → درخواستی نمی‌فرستیم (سرور هم همین قوانین رو داره).
+    if (!pushed) return;
 
     RewindMemory.instance
         .enqueue(() => ApiClient.swipe(c.publicId, direction))
@@ -304,8 +313,11 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
                 const SizedBox(height: 16),
                 if (match.photoUrl.isNotEmpty)
                   ClipOval(
-                    child: Image.network('$backendBaseUrl${match.photoUrl}',
-                        width: 100, height: 100, fit: BoxFit.cover),
+                    child: AppNetworkImage('$backendBaseUrl${match.photoUrl}',
+                        thumb: true,
+                        placeholderColor: const Color(0xFF2C2C2E),
+                        width: 100,
+                        height: 100),
                   ),
                 const SizedBox(height: 12),
                 Text('تو و ${match.name} همدیگه رو لایک کردین!',

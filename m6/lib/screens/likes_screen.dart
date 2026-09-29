@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../api_client.dart';
 import '../likes/likes_data.dart';
+import '../widgets/app_network_image.dart';
 
 /// تب «لایک‌ها» — دقیقاً شبیهِ صفحه‌ی Likes You تیندر:
 ///   • هدر با تعدادِ کسایی که لایکت کرده‌ان.
@@ -361,10 +362,11 @@ class _LikeCard extends StatelessWidget {
                         color: const Color(0xFF2C2C2E),
                         child: const Icon(Icons.person, color: Color(0xFF48484A), size: 44),
                       )
-                    : Image.network(
+                    : AppNetworkImage(
                         photoUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
+                        thumb: true,
+                        placeholderColor: const Color(0xFF2C2C2E),
+                        errorBuilder: (_) => Container(
                           color: const Color(0xFF2C2C2E),
                           child: const Icon(Icons.person, color: Color(0xFF48484A), size: 44),
                         ),
@@ -467,10 +469,11 @@ class _LikeProfileDetail extends StatelessWidget {
         children: [
           photoUrl.isEmpty
               ? Container(color: const Color(0xFF2C2C2E))
-              : Image.network(
+              : AppNetworkImage(
                   photoUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(color: const Color(0xFF2C2C2E)),
+                  progressive: true,
+                  placeholderColor: const Color(0xFF2C2C2E),
+                  errorBuilder: (_) => Container(color: const Color(0xFF2C2C2E)),
                 ),
           const Positioned.fill(
             child: DecoratedBox(

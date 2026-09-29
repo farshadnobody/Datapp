@@ -6,6 +6,7 @@ import '../api_client.dart';
 import '../models/profile_models.dart';
 import '../style/app_colors.dart';
 import 'photo_crop_screen.dart';
+import '../widgets/app_network_image.dart';
 
 /// نسخه‌ی تیره‌ی PhotoManagerScreen، مخصوص صفحه‌ی «پروفایل من» — همون
 /// endpoint‌ها رو صدا می‌زنه (آپلود/حذف/چیدمان) ولی ظاهرش دقیقاً مثل
@@ -172,12 +173,11 @@ class _PhotoGridEditorScreenState extends State<PhotoGridEditorScreen> {
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: Image.network(
+          child: AppNetworkImage(
             '$backendBaseUrl${photo.url}',
-            fit: BoxFit.cover,
-            loadingBuilder: (context, child, progress) =>
-                progress == null ? child : const ColoredBox(color: AppDark.card),
-            errorBuilder: (context, error, stack) => const ColoredBox(
+            thumb: true,
+            placeholderColor: AppDark.card,
+            errorBuilder: (context) => const ColoredBox(
               color: AppDark.card,
               child: Icon(Icons.broken_image_outlined, color: AppDark.muted),
             ),

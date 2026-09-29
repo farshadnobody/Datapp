@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../api_client.dart';
+import '../connection_monitor.dart';
 
 // یه نوار نازک بالای صفحه که هر چند ثانیه یک‌بار با بک‌اند چک می‌کنه اتصال
 // برقراره یا نه، و رنگ/متنش رو بر همون اساس عوض می‌کنه.
@@ -13,27 +14,41 @@ class ConnectionStatusBanner extends StatefulWidget {
 }
 
 class _ConnectionStatusBannerState extends State<ConnectionStatusBanner> {
-  bool? _connected; // null = هنوز چک نکردیم
-  Timer? _timer;
+  // وضعیت از ConnectionMonitor میاد (هر درخواستِ واقعیِ اپ اون رو به‌روز می‌کنه)،
+  // پس وقتی وصلیم هیچ درخواستِ چکی نمی‌ره. فقط وقتی «قطع» شد هر ۱۰ ثانیه
+  // /api/health رو می‌زنیم تا برگشتنِ اتصال رو بفهمیم.
+  bool? get _connected => ConnectionMonitor.online.value;
+  Timer? _retryTimer;
 
   @override
   void initState() {
     super.initState();
-    _check();
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _check());
+    ConnectionMonitor.online.addListener(_onChanged);
+    _syncTimer();
   }
 
-  Future<void> _check() async {
-    final result = await ApiClient.checkHealth();
-    // فقط وقتی وضعیت واقعاً عوض شده rebuild کن — نه هر ۵ ثانیه بی‌دلیل.
-    if (mounted && result != _connected) {
-      setState(() => _connected = result);
+  void _onChanged() {
+    if (!mounted) return;
+    setState(() {});
+    _syncTimer();
+  }
+
+  void _syncTimer() {
+    if (_connected == false) {
+      _retryTimer ??= Timer.periodic(
+        const Duration(seconds: 10),
+        (_) => ApiClient.checkHealth(),
+      );
+    } else {
+      _retryTimer?.cancel();
+      _retryTimer = null;
     }
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    ConnectionMonitor.online.removeListener(_onChanged);
+    _retryTimer?.cancel();
     super.dispose();
   }
 

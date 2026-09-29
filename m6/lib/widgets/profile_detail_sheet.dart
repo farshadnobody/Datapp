@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../api_client.dart';
 import '../models/profile_models.dart';
+import 'app_network_image.dart';
 import '../swipe/swipe_style.dart';
 
 // نکته: onSwipe اختیاریه — وقتی از Discovery باز می‌شه پاس داده می‌شه (برای
@@ -39,7 +40,7 @@ class ProfileDetailSheet extends StatelessWidget {
               children: candidate.photos
                   .map((p) => ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: Image.network('$backendBaseUrl${p.url}', fit: BoxFit.cover),
+                        child: AppNetworkImage('$backendBaseUrl${p.url}', progressive: true),
                       ))
                   .toList(),
             ),

@@ -5,6 +5,7 @@ import '../api_client.dart';
 import '../models/match_models.dart';
 import '../style/app_colors.dart';
 import 'chat_screen.dart';
+import '../widgets/app_network_image.dart';
 
 /// لیست چت — سرِ صفحه، نوارِ جستجو، ردیفِ «متچ‌های جدید» (+ کارتِ تیزرِ
 /// لایک‌ها)، و پایینش لیستِ «پیام‌ها». دیتا از `GET /api/conversations` و
@@ -251,7 +252,7 @@ class _NewMatchCard extends StatelessWidget {
                 height: 116,
                 child: url.isEmpty
                     ? Container(color: AppDark.cardAlt, child: const Icon(Icons.person, color: AppDark.muted))
-                    : Image.network(url, fit: BoxFit.cover),
+                    : AppNetworkImage(url, thumb: true, placeholderColor: AppDark.card),
               ),
             ),
             const SizedBox(height: 6),
@@ -294,7 +295,7 @@ class _LikesTeaserCard extends StatelessWidget {
                     if (previewUrl != null)
                       ImageFiltered(
                         imageFilter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-                        child: Image.network(previewUrl, fit: BoxFit.cover),
+                        child: AppNetworkImage(previewUrl, thumb: true, placeholderColor: AppDark.card),
                       )
                     else
                       Container(

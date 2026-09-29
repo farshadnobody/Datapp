@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import '../api_client.dart';
 import '../models/profile_models.dart';
 import 'home_screen.dart';
+import '../widgets/app_network_image.dart';
 
 class PhotoManagerScreen extends StatefulWidget {
   const PhotoManagerScreen({super.key});
@@ -240,15 +241,11 @@ class _PhotoManagerScreenState extends State<PhotoManagerScreen> {
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: Image.network(
+          child: AppNetworkImage(
             '$backendBaseUrl${photo.url}',
-            fit: BoxFit.cover,
-            loadingBuilder: (context, child, progress) {
-              if (progress == null) return child;
-              return const Center(
-                  child: CircularProgressIndicator(strokeWidth: 2));
-            },
-            errorBuilder: (context, error, stack) =>
+            thumb: true,
+            placeholderColor: Colors.black12,
+            errorBuilder: (context) =>
                 const Icon(Icons.broken_image_outlined, color: Colors.grey),
           ),
         ),

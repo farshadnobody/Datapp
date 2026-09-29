@@ -16,6 +16,7 @@ import 'preview_profile_screen.dart';
 import 'private_photos_screen.dart';
 import 'profile_sheets.dart';
 import 'start_screen.dart';
+import '../widgets/app_network_image.dart';
 
 /// صفحه‌ی «پروفایل من» — همون چیزی که با زدن تب Profile تو نوار پایین باز
 /// می‌شه. ساختارش دقیقاً از روی اسکرین‌شات‌های تیندر کپی شده:
@@ -499,7 +500,7 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
             height: 56,
             child: thumb == null
                 ? Container(color: AppDark.card, child: const Icon(Icons.person, color: AppDark.muted))
-                : Image.network(thumb, fit: BoxFit.cover),
+                : AppNetworkImage(thumb, thumb: true, placeholderColor: AppDark.card),
           ),
         ),
         const SizedBox(width: 12),
@@ -705,7 +706,7 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
                       ? SizedBox(width: double.infinity, child: _dashedAddBox(onTap: _editPhotos))
                       : Row(
                           children: _photos
-                              .map((p) => Expanded(child: Image.network('$backendBaseUrl${p.url}', fit: BoxFit.cover)))
+                              .map((p) => Expanded(child: AppNetworkImage('$backendBaseUrl${p.url}', thumb: true, placeholderColor: AppDark.card)))
                               .toList(),
                         ),
                 ),

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:geolocator/geolocator.dart';
 import '../api_client.dart';
 import '../models/match_models.dart';
 import '../models/profile_models.dart';
+import '../swipe/location_gate.dart';
 import '../swipe/remove_like_flow.dart';
 import '../swipe/rewind_memory.dart';
 import '../swipe/swipe_action_bar.dart';
@@ -15,6 +15,7 @@ import '../swipe/swipe_style.dart';
 import '../widgets/profile_detail_sheet.dart';
 import 'location_picker_screen.dart';
 import 'matches_screen.dart';
+import '../widgets/app_network_image.dart';
 
 /// تب «Swipe» — صفحه‌ی اصلی اپ (سبک تیندر).
 ///
@@ -29,13 +30,16 @@ class SwipeScreen extends StatefulWidget {
   /// باز می‌کنه). اگه null باشه صفحه‌ی متچ‌ها push می‌شه.
   final VoidCallback? onOpenMatches;
 
-  const SwipeScreen({super.key, this.onOpenMatches});
+  /// هر بار که کاربر دوباره وارد تب سواپ می‌شه تغییر می‌کنه (برای چکِ لوکیشن).
+  final Listenable? enterSignal;
+
+  const SwipeScreen({super.key, this.onOpenMatches, this.enterSignal});
 
   @override
   State<SwipeScreen> createState() => _SwipeScreenState();
 }
 
-class _SwipeScreenState extends State<SwipeScreen> {
+class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
   /// شعاع تب «نزدیک» (کیلومتر).
   static const double _nearbyKm = 30;
 
@@ -76,6 +80,8 @@ class _SwipeScreenState extends State<SwipeScreen> {
   void initState() {
     super.initState();
     RewindMemory.instance.addListener(_onRewindMemoryChanged);
+    WidgetsBinding.instance.addObserver(this);
+    widget.enterSignal?.addListener(_onEnterSwipeTab);
     _init();
   }
 
@@ -86,6 +92,8 @@ class _SwipeScreenState extends State<SwipeScreen> {
   @override
   void dispose() {
     RewindMemory.instance.removeListener(_onRewindMemoryChanged);
+    widget.enterSignal?.removeListener(_onEnterSwipeTab);
+    WidgetsBinding.instance.removeObserver(this);
     _deck.dispose();
     super.dispose();
   }
@@ -95,43 +103,141 @@ class _SwipeScreenState extends State<SwipeScreen> {
   // ---------------------------------------------------------------------
 
   Future<void> _init() async {
-    // سقف زمانی برای مرحله‌ی لوکیشن (بعضی پلتفرم‌ها تو دیالوگ مجوز گیر می‌کنن).
-    await _tryUpdateLocation().timeout(
-      const Duration(seconds: 10),
-      onTimeout: () {},
-    );
-    try {
-      final options = await ApiClient.fetchProfileOptions();
-      if (mounted) setState(() => _options = options);
-    } catch (_) {}
-    try {
-      final profile = await ApiClient.fetchMyProfile();
-      if (mounted) {
-        setState(() {
-          _interestedIn = profile.interestedIn;
-          _myInterests = profile.interests.toSet();
-        });
-      }
-    } catch (_) {}
+    // گزینه‌ها و پروفایل به لیستِ افراد ربطی ندارن: موازی و بدونِ منتظر موندن.
+    _loadOptionsAndProfile();
+
+    // لوکیشن فقط وقتی وقت می‌گیره که واقعاً لازم باشه (≥۴۸ ساعت از آخرین
+    // ارسال گذشته)؛ چون لیستِ افراد به لوکیشن نیاز داره، قبلش تمومش می‌کنیم.
+    await _ensureLocation(firstEntry: true, waitAtMost: const Duration(seconds: 30));
     await _loadMore();
   }
 
-  Future<void> _tryUpdateLocation() async {
-    try {
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        return;
-      }
-      final position = await Geolocator.getCurrentPosition(
-              locationSettings:
-                  const LocationSettings(accuracy: LocationAccuracy.low))
-          .timeout(const Duration(seconds: 8));
-      await ApiClient.updateLocation(position.latitude, position.longitude);
-    } catch (_) {}
+  void _loadOptionsAndProfile() {
+    ApiClient.fetchProfileOptions().then((options) {
+      if (mounted) setState(() => _options = options);
+    }).catchError((_) {});
+    ApiClient.fetchMyProfile().then((profile) {
+      if (!mounted) return;
+      setState(() {
+        _interestedIn = profile.interestedIn;
+        _myInterests = profile.interests.toSet();
+      });
+    }).catchError((_) {});
+  }
+
+  // ---------------------------------------------------------------------
+  // لوکیشن
+  // ---------------------------------------------------------------------
+
+  LocationIssue _locationIssue = LocationIssue.none;
+  bool _locationBannerDismissed = false;
+  bool _locationBusy = false;
+
+  /// چکِ لوکیشن. [firstEntry] فقط برای اولین ورود بعد از باز شدنِ اپ: فقط همون‌جا
+  /// ممکنه دیالوگِ مجوز بیاد و پیامِ «مجوز لازمه» نشون داده بشه. بقیه‌ی چک‌ها
+  /// (رفت‌وآمد بین تب‌ها) بی‌صدان: اگه مجوز باشه و لوکیشن منقضی شده باشه، لوکیشنِ
+  /// جدید بی‌سروصدا فرستاده می‌شه، ولی هیچ پیامی نمایش داده نمی‌شه.
+  /// [waitAtMost]: بیشتر از این منتظرِ جوابش نمی‌مونیم.
+  Future<void> _ensureLocation({
+    bool firstEntry = false,
+    bool userInitiated = false,
+    Duration? waitAtMost,
+  }) async {
+    if (_locationBusy) return;
+    _locationBusy = true;
+    final task = LocationGate.ensure(
+      allowPrompt: firstEntry,
+      userInitiated: userInitiated,
+    ).then((r) {
+      _locationBusy = false;
+      if (!mounted) return r;
+      final hadIssue = _locationIssue != LocationIssue.none;
+      setState(() {
+        if (r.issue == LocationIssue.none) {
+          _locationIssue = LocationIssue.none; // مشکل حل شده
+        } else if (firstEntry || userInitiated) {
+          _locationIssue = r.issue;
+          _locationBannerDismissed = false;
+        }
+        // چکِ بی‌صدا: پیامی که هست/نیست همون‌طور می‌مونه.
+      });
+      // مشکل حل شد (مثلاً مجوز رو دادی): لیست رو با لوکیشنِ جدید بگیر.
+      if (hadIssue && r.issue == LocationIssue.none) _reload();
+      return r;
+    });
+    if (waitAtMost != null) {
+      await task.timeout(waitAtMost, onTimeout: () => const LocationResult(LocationIssue.none));
+    } else {
+      await task;
+    }
+  }
+
+  void _onEnterSwipeTab() {
+    // هر بار که از تب دیگه برمی‌گردی به سواپ: پیامِ مجوز (اگه هنوز رو صفحه‌ست)
+    // بسته می‌شه تا اسپم نشه، و فقط بی‌صدا چک می‌شه که لوکیشن منقضی نشده باشه.
+    if (_locationIssue != LocationIssue.none && !_locationBannerDismissed) {
+      setState(() => _locationBannerDismissed = true);
+    }
+    _ensureLocation();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // از تنظیماتِ گوشی برگشتی: اگه مجوز/GPS رو درست کرده باشی، همین‌جا حل می‌شه.
+    if (state == AppLifecycleState.resumed && _locationIssue != LocationIssue.none) {
+      _ensureLocation();
+    }
+  }
+
+  Future<void> _onLocationAction() async {
+    switch (_locationIssue) {
+      case LocationIssue.deniedForever:
+      case LocationIssue.serviceOff:
+        await LocationGate.openSettings(_locationIssue);
+        break;
+      default:
+        await _ensureLocation(userInitiated: true);
+    }
+  }
+
+  String get _locationMessage => _locationIssue == LocationIssue.serviceOff
+      ? 'برای دیدن افراد نزدیک به خودت، GPS گوشیت رو روشن کن.'
+      : 'برای دیدن افراد نزدیک به خودت، مجوز لوکیشن لازمه.';
+
+  Widget _buildLocationBanner() {
+    final needsSettings = _locationIssue == LocationIssue.deniedForever ||
+        _locationIssue == LocationIssue.serviceOff;
+    return Material(
+      color: const Color(0xEE2C2C2E),
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(12, 8, 4, 8),
+        child: Row(
+          children: [
+            const Icon(Icons.location_off_outlined, color: Colors.white70, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _locationMessage,
+                style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.3),
+              ),
+            ),
+            TextButton(
+              onPressed: _onLocationAction,
+              child: Text(
+                needsSettings ? 'تنظیمات' : 'فعال‌سازی',
+                style: const TextStyle(color: SwipeColors.like, fontWeight: FontWeight.w700),
+              ),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.close, color: Colors.white54, size: 18),
+              onPressed: () => setState(() => _locationBannerDismissed = true),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   double? get _effectiveDistance {
@@ -214,7 +320,12 @@ class _SwipeScreenState extends State<SwipeScreen> {
       for (final c in _stack.take(3)) {
         if (c.photos.isEmpty) continue;
         precacheImage(
-          NetworkImage('$backendBaseUrl${c.photos.first.url}'),
+          appImageProvider('$backendBaseUrl${c.photos.first.url}'),
+          context,
+          onError: (e, s) {},
+        );
+        precacheImage(
+          appImageProvider(photoThumbUrl('$backendBaseUrl${c.photos.first.url}')),
           context,
           onError: (e, s) {},
         );
@@ -263,6 +374,10 @@ class _SwipeScreenState extends State<SwipeScreen> {
     if (_stack.length < 5) _loadMore();
     _precacheTop();
     _countOnboarding(direction);
+
+    // اکشنِ بی‌اثر (مثلاً رد روی لایک‌شده): درخواستی نمی‌فرستیم. سرور هم
+    // همین قوانین رو داره، پس اگه اطلاعاتِ کارت قدیمی باشه بازم امنه.
+    if (!pushed) return;
 
     RewindMemory.instance
         .enqueue(() => ApiClient.swipe(c.publicId, direction))
@@ -383,11 +498,12 @@ class _SwipeScreenState extends State<SwipeScreen> {
                 const SizedBox(height: 16),
                 if (match.photoUrl.isNotEmpty)
                   ClipOval(
-                    child: Image.network(
+                    child: AppNetworkImage(
                       '$backendBaseUrl${match.photoUrl}',
+                      thumb: true,
                       width: 100,
                       height: 100,
-                      fit: BoxFit.cover,
+                      placeholderColor: const Color(0xFF2C2C2E),
                     ),
                   ),
                 const SizedBox(height: 12),
@@ -514,6 +630,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
                   ? SwipeDirection.left
                   : SwipeDirection.up);
     }
+    if (!pushed) return; // اکشنِ بی‌اثر → درخواستی لازم نیست.
     try {
       final result = await RewindMemory.instance
           .enqueue(() => ApiClient.swipe(candidate.publicId, direction));
@@ -741,6 +858,13 @@ class _SwipeScreenState extends State<SwipeScreen> {
           right: 0,
           child: _buildHeader(),
         ),
+        if (_locationIssue != LocationIssue.none && !_locationBannerDismissed)
+          Positioned(
+            top: topPad + SwipeMetrics.headerHeight + 4,
+            left: 12,
+            right: 12,
+            child: _buildLocationBanner(),
+          ),
       ],
     );
   }

@@ -1,4 +1,7 @@
 import 'swipe/rewind_memory.dart';
+import 'http_cache.dart';
+import 'swipe/location_gate.dart';
+import 'widgets/app_network_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'swipe/swipe_onboarding_store.dart';
 
@@ -57,6 +60,9 @@ class AuthSession {
 
   static Future<void> clear() async {
     RewindMemory.instance.clear(); // حافظه‌ی Rewind فقط مالِ همین session/حساب‌ـه
+    HttpCacheStore.clearAll(); // کشِ پروفایل/گزینه‌ها
+    LocationGate.reset(); // لوکیشنِ حسابِ بعدی دوباره گرفته بشه
+    AppImageCache.clear(); // عکسِ آدم‌های دیگه نباید رو گوشی بمونه
     token = null;
     phone = null;
     hasProfile = false;

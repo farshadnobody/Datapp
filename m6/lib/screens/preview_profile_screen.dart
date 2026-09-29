@@ -6,6 +6,7 @@ import '../onboarding/onboarding_data.dart';
 import '../style/app_colors.dart';
 import '../swipe/swipe_style.dart';
 import '../widgets/my_profile_detail_sheet.dart';
+import '../widgets/app_network_image.dart';
 
 /// «Preview Profile» — یه صفحه‌ی پیوسته (مثل اسکرولِ یه صفحه‌ی وب): کارتِ
 /// عکس **دقیقاً هم‌اندازه‌ی کارتِ صفحه‌ی سواپ** (تمام‌عرض، از زیرِ هدر تا جایی
@@ -455,15 +456,11 @@ class _PhotoCard extends StatelessWidget {
                 child: const Center(child: Icon(Icons.person, size: 110, color: Color(0xFF3A3B40))),
               )
             else
-              Image.network(
+              AppNetworkImage(
                 urls[index.clamp(0, urls.length - 1)],
-                fit: BoxFit.cover,
-                gaplessPlayback: true,
-                loadingBuilder: (context, child, progress) {
-                  if (progress == null) return child;
-                  return const ColoredBox(color: Color(0xFF1B1C1F));
-                },
-                errorBuilder: (context, error, stack) => Container(
+                progressive: true,
+                keepOldWhileLoading: true,
+                errorBuilder: (context) => Container(
                   color: const Color(0xFF1B1C1F),
                   child: const Center(child: Icon(Icons.broken_image_outlined, size: 56, color: Color(0xFF55565B))),
                 ),
