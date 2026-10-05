@@ -6,6 +6,10 @@ import '../models/match_models.dart';
 import '../style/app_colors.dart';
 import 'chat_screen.dart';
 import '../widgets/app_network_image.dart';
+import '../chat/conversations_store.dart';
+import '../bootstrap/bootstrap_service.dart';
+import '../likes/likes_store.dart';
+import '../subscription/subscription_state.dart';
 
 /// لیست چت — سرِ صفحه، نوارِ جستجو، ردیفِ «متچ‌های جدید» (+ کارتِ تیزرِ
 /// لایک‌ها)، و پایینش لیستِ «پیام‌ها». دیتا از `GET /api/conversations` و
@@ -31,7 +35,12 @@ class _MatchesScreenState extends State<MatchesScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    // لیستِ چت‌ها از ConversationsStore میاد (فایلِ ذخیره‌شده + رویدادهای سرور)؛ این صفحه
+    // هر بار که باز می‌شه چیزی از سرور نمی‌گیره.
+    ConversationsStore.instance.addListener(_syncFromStore);
+    AppCounters.instance.addListener(_syncFromStore);
+    LikesStore.instance.addListener(_syncFromStore);
+    _syncFromStore();
     _searchController.addListener(() {
       setState(() => _query = _searchController.text.trim());
     });
@@ -39,57 +48,40 @@ class _MatchesScreenState extends State<MatchesScreen> {
 
   @override
   void dispose() {
+    ConversationsStore.instance.removeListener(_syncFromStore);
+    AppCounters.instance.removeListener(_syncFromStore);
+    LikesStore.instance.removeListener(_syncFromStore);
     _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
+  void _syncFromStore() {
+    if (!mounted) return;
+    final store = ConversationsStore.instance;
+    // تیزرِ لایک‌ها: از شمارنده‌ی روی گوشی (رایگان) یا لایک‌های ذخیره‌شده (اشتراکی)؛
+    // درخواستِ جدا به /api/likes/summary نمی‌ره.
+    final premium = SubscriptionState.instance.isPremium;
+    final previews = premium
+        ? LikesStore.instance.entries
+            .map((e) => e.candidate.photos.isNotEmpty ? e.candidate.photos.first.url : '')
+            .where((u) => u.isNotEmpty)
+            .take(3)
+            .toList()
+        : <String>[];
     setState(() {
-      _loading = true;
-      _error = null;
+      _conversations = store.items;
+      _loading = store.loading && store.items.isEmpty;
+      _error = store.error;
+      _likes = LikesSummary(
+        count: AppCounters.instance.likesCount,
+        superLikeCount: AppCounters.instance.superLikeCount,
+        previewPhotoUrls: previews,
+      );
     });
-    try {
-      // این دو تا رو جدا می‌گیریم: اگه یکیشون (مثلاً likes/summary که
-      // هنوز پیاده نشده) خطا بده، نباید کل صفحه خراب بشه.
-      List<ConversationSummary> conversations = [];
-      LikesSummary? likes;
-      try {
-        conversations = await ApiClient.fetchConversations();
-      } catch (_) {
-        // اگه /api/conversations هنوز نیست، از لیستِ خامِ متچ‌ها (که همیشه
-        // بوده) به‌عنوان جایگزین استفاده کن — بدون پیام/وضعیتِ نوبت، ولی
-        // صفحه خالی نمی‌مونه. با پیاده‌سازیِ /api/conversations رو بک‌اند،
-        // این fallback خودکار کنار می‌ره.
-        final raw = await ApiClient.fetchMatches();
-        conversations = raw
-            .map((m) => ConversationSummary(
-                  publicId: m.publicId,
-                  name: m.name,
-                  photoUrl: m.photoUrl,
-                  matchedAt: m.matchedAt,
-                  state: m.state,
-                ))
-            .toList();
-      }
-      try {
-        likes = await ApiClient.fetchLikesSummary();
-      } catch (_) {
-        likes = null;
-      }
-      if (!mounted) return;
-      setState(() {
-        _conversations = conversations;
-        _likes = likes;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'دریافت چت‌ها با مشکل مواجه شد.';
-        _loading = false;
-      });
-    }
   }
+
+  /// تلاشِ دوباره (دکمه‌ی «دوباره» وقتی خطا بود).
+  Future<void> _load() => ConversationsStore.instance.refresh();
 
   MatchSummary _toMatchSummary(ConversationSummary c) =>
       MatchSummary(publicId: c.publicId, name: c.name, photoUrl: c.photoUrl, matchedAt: c.matchedAt);
@@ -98,9 +90,8 @@ class _MatchesScreenState extends State<MatchesScreen> {
     HapticFeedback.lightImpact();
     await Navigator.of(context)
         .push<bool>(MaterialPageRoute(builder: (_) => ChatScreen(match: _toMatchSummary(c))));
-    // همیشه رفرش کن — ممکنه پیامی رد و بدل شده باشه (یا Unmatch/Block شده
-    // باشه) که باید تو لیست منعکس بشه.
-    _load();
+    // لازم نیست رفرش کنیم: پیامی که فرستادیم، پاک‌کردنِ گفتگو و آنمتچ/بلاک خودشون
+    // ConversationsStore رو به‌روز می‌کنن.
   }
 
   List<ConversationSummary> get _filtered {

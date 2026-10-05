@@ -11,6 +11,8 @@ import 'push_notifications.dart';
 import 'swipe/remove_like_hint.dart';
 import 'widgets/app_network_image.dart';
 import 'swipe/swipe_onboarding_store.dart';
+import 'bootstrap/bootstrap_service.dart';
+import 'swipe/swipe_outbox.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -27,6 +29,8 @@ void main() async {
   // شمارنده‌ی «۲۰ نفر اول» (مرحله‌ی یادگیری سلیقه تو صفحه‌ی Swipe).
   await SwipeOnboarding.load();
   await RemoveLikeHint.load();
+  await SwipeOutbox.instance.init(); // ردهای ارسال‌نشده‌ی دفعه‌ی قبل (اگه مونده باشه)
+  await BootstrapService.instance.init(); // نسخه‌ها و تبلیغ‌های ذخیره‌شده + گوش دادن به رویدادهای سرور
   AppImageCache.trimIfTooBig(); // تو پس‌زمینه؛ منتظرش نمی‌مونیم
 
   // اگه سرور توکن رو رد کرد (مثلاً منقضی شده)، کاربر رو برمی‌گردونیم به شروع.

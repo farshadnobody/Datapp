@@ -23,6 +23,14 @@ class ChatMessage {
         liked: liked ?? this.liked,
       );
 
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'from_me': fromMe,
+        'body': body,
+        'sent_at': sentAt.toIso8601String(),
+        'liked': liked,
+      };
+
   factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
         id: json['id'] ?? 0,
         fromMe: json['from_me'] ?? false,
@@ -30,4 +38,27 @@ class ChatMessage {
         sentAt: DateTime.tryParse(json['sent_at']?.toString() ?? '') ?? DateTime.now(),
         liked: json['liked'] ?? false,
       );
+}
+
+/// یه صفحه از پیام‌های مکالمه (قدیمی → جدید).
+///  - [hasMore]: پیام‌های قدیمی‌ترِ قابل‌دیدن هم هست (دکمه‌ی «پیام‌های قبلی»).
+///  - [locked]: پیام‌های قدیمی‌تری هست که فقط با اشتراک دیده می‌شن (کاربرِ رایگان).
+class MessagesPage {
+  final List<ChatMessage> messages;
+  final bool hasMore;
+  final bool locked;
+
+  /// شمارنده‌ی «پاک کردنِ گفتگو» (برای اعتبارِ کشِ محلی).
+  final int epoch;
+
+  /// true یعنی «کشِ محلی‌ات بی‌اعتباره؛ این لیست رو جای همه‌ی پیام‌هات بذار».
+  final bool reset;
+
+  const MessagesPage({
+    required this.messages,
+    required this.hasMore,
+    required this.locked,
+    this.epoch = 0,
+    this.reset = false,
+  });
 }

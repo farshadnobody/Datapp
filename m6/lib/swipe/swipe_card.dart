@@ -189,7 +189,26 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
     }
   }
 
+  bool _loadingDetails = false;
+
+  /// کارتِ سبک: جزئیات (پرامپت‌ها، سبک زندگی، تحصیلات، «دنبال چی هستم»...) فقط وقتی کاربر
+  /// فلش رو می‌زنه از سرور گرفته می‌شه و روی همین کارت می‌شینه.
+  Future<void> _ensureDetails() async {
+    final c = widget.candidate;
+    if (c.detailsLoaded || _loadingDetails) return;
+    _loadingDetails = true;
+    try {
+      final full = await ApiClient.fetchDiscoveryProfile(c.publicId);
+      c.applyDetails(full);
+    } catch (_) {
+      // شبکه/خطا: کارت با همون اطلاعاتِ سبک می‌مونه؛ دفعه‌ی بعد دوباره تلاش می‌شه.
+    }
+    _loadingDetails = false;
+    if (mounted) setState(() {});
+  }
+
   Future<void> _expand() async {
+    _ensureDetails();
     final token = ++_animToken;
     setState(() {
       _unlocked = true;

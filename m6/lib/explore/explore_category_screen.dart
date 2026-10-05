@@ -12,16 +12,22 @@ import '../swipe/swipe_deck.dart';
 import '../swipe/swipe_style.dart';
 import 'explore_data.dart';
 import '../widgets/app_network_image.dart';
+import '../subscription/subscription_state.dart';
+import '../subscription/premium_paywall.dart';
+import '../swipe/swipe_outbox.dart';
+import '../likes/likes_store.dart';
+import '../cache/discovery_feed.dart';
+import '../cache/discovery_queue.dart';
 
 /// استکِ سواپِ مخصوصِ یه دسته‌ی اکسپلور — دقیقاً همون رفتارِ تیندر: با تپِ یه
 /// تایل تو Explore، یه صفحه‌ی تمام‌صفحه باز می‌شه که فقط کاندیدهایی که تویِ
 /// همون دسته جا می‌شن رو نشون می‌ده و مثلِ تبِ سواپِ اصلی می‌شه لایک/رد/
 /// سوپرلایک کرد.
 ///
-/// چون بک‌اند فیلترِ دسته‌ای نداره، از همون /api/discovery معمولی صفحه‌صفحه
-/// می‌گیریم و کلاینت با [ExploreCategory.matches] فیلتر می‌کنه؛ اگه صفحه‌ای
-/// هیچ‌کدوم‌شون جا نشن، خودکار صفحه‌ی بعدی رو هم می‌گیره (تا سقفِ یه تعداد
-/// دورِ مشخص، که درخواستِ بی‌نهایت نزنه).
+/// فیلترِ دسته کاملاً سمتِ سرور و تو همون /api/discovery انجام می‌شه
+/// (`explore_id=<category.id>`)؛ کلاینت هیچ فیلتری انجام نمی‌ده و درخواستِ اضافه
+/// برای پیدا کردنِ کارتِ مناسب نمی‌زنه. هر دسته (و هر mode: ندیده‌ها / دوباره ببین)
+/// صفِ پایدارِ مستقلِ خودش رو داره؛ سیاستِ ۷۰٪ / ۲۴ ساعت مثلِ تبِ سواپ.
 class ExploreCategoryScreen extends StatefulWidget {
   final ExploreCategory category;
   const ExploreCategoryScreen({super.key, required this.category});
@@ -31,13 +37,11 @@ class ExploreCategoryScreen extends StatefulWidget {
 }
 
 class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
-  static const int _pageLimit = 30;
-  static const int _maxRoundsPerLoad = 6;
-
   final SwipeDeckController _deck = SwipeDeckController();
 
   List<DiscoveryCandidate> _stack = [];
-  final Set<String> _fetched = {}; // همه‌ی publicId هایی که تا الان از سرور اومدن
+  final Set<String> _excluded = {}; // کارت‌هایی که تو همین session ازشون رد شدیم
+  DiscoveryFeed? _feed;
   bool _rewinding = false;
 
   /// حالت «دوباره ببین»: بعد از دیدنِ همه‌ی پروفایل‌های دسته، با همون
@@ -50,7 +54,7 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
 
   bool _loading = true;
   bool _loadingMore = false;
-  bool _exhausted = false; // سرور دیگه چیزِ جدیدی نداره
+  bool _exhausted = false; // سرور برای tierِ فعلی کمتر از limit داد
   int _generation = 0;
   String? _error;
 
@@ -61,6 +65,7 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
   void initState() {
     super.initState();
     RewindMemory.instance.addListener(_onRewindMemoryChanged);
+    SubscriptionState.instance.addListener(_onSubscriptionChanged);
     _init();
   }
 
@@ -71,6 +76,7 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
   @override
   void dispose() {
     RewindMemory.instance.removeListener(_onRewindMemoryChanged);
+    SubscriptionState.instance.removeListener(_onSubscriptionChanged);
     _deck.dispose();
     super.dispose();
   }
@@ -84,7 +90,7 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
       final profile = await ApiClient.fetchMyProfile();
       if (mounted) setState(() => _myInterests = profile.interests.toSet());
     } catch (_) {}
-    await _loadMore();
+    await _loadMore(restore: true);
   }
 
   Map<String, String> get _promptTextMap {
@@ -97,39 +103,53 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
     return {for (final i in _options!.interests) i.id: i.label};
   }
 
-  Future<void> _loadMore() async {
-    if (_loadingMore || _exhausted) return;
+  DiscoveryFeed _buildFeed() {
+    final mode = _seeingAgain ? 'all' : 'new';
+    return DiscoveryFeed(
+      key: 'explore:${widget.category.id}|$mode',
+      filters: widget.category.id,
+      mode: mode,
+      fetch: (exclude) => ApiClient.fetchDiscovery(
+        lean: true,
+        limit: DiscoveryQueue.batchSize,
+        exploreId: widget.category.id, // فیلترِ دسته سمتِ سرور (قبل از limit)
+        exclude: exclude,
+        includeSwiped: _seeingAgain, // mode=all فقط با «دوباره ببین»
+      ),
+    );
+  }
+
+  void _maybeLoadNext() {
+    final feed = _feed;
+    if (feed == null || _loadingMore) return;
+    if (feed.needsFetch) _loadMore();
+  }
+
+  Future<void> _loadMore({bool restore = false}) async {
+    if (_loadingMore) return;
     _loadingMore = true;
     final gen = _generation;
     if (mounted) setState(() => _error = null);
 
     try {
-      var rounds = 0;
-      final gathered = <DiscoveryCandidate>[];
-      // چون فیلترِ دسته سمتِ کلاینته، ممکنه یه صفحه‌ی کامل هیچ عضوی از این
-      // دسته نداشته باشه؛ پس تا وقتی یا چندتا پیدا بشه، یا سرور خالی برگردونه،
-      // یا به سقفِ دور برسیم، ادامه می‌دیم.
-      while (rounds < _maxRoundsPerLoad && gathered.length < 6) {
-        final page = await ApiClient.fetchDiscovery(
-          limit: _pageLimit,
-          exclude: _fetched.toList(),
-          includeSwiped: _seeingAgain,
+      final feed = _feed ??= _buildFeed();
+      var resolved = restore ? await feed.restore() : const <DiscoveryCandidate>[];
+      if (!mounted || gen != _generation) return;
+      // یه درخواست در هر batch؛ هیچ loop یا درخواستِ اضافه‌ای نیست.
+      _exhausted = feed.exhausted;
+      final stackEmpty = _stack.isEmpty && resolved.isEmpty;
+      if (feed.needsFetch || (stackEmpty && !_exhausted)) {
+        resolved = await feed.fetchNext(
+          exclude: {..._excluded, ...SwipeOutbox.instance.ids}.toList(),
         );
-        if (gen != _generation) return;
-        rounds++;
-        if (page.isEmpty) {
-          _exhausted = true;
-          break;
-        }
-        _fetched.addAll(page.map((c) => c.publicId));
-        gathered.addAll(page.where(widget.category.matches));
       }
       if (!mounted || gen != _generation) return;
+      _exhausted = feed.exhausted;
       final existing = _stack.map((c) => c.publicId).toSet();
       setState(() {
         _stack = [
           ..._stack,
-          ...gathered.where((c) => !existing.contains(c.publicId)),
+          ...resolved.where((c) => !existing.contains(c.publicId) && !_excluded.contains(c.publicId)),
         ];
       });
       _precacheTop();
@@ -153,7 +173,7 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
     _generation++;
     _loadingMore = false;
     _exhausted = false;
-    _fetched.clear();
+    _feed = null; // هر mode صفِ مستقلِ خودش رو داره
     setState(() {
       _expandedId = null;
       _lockedId = null;
@@ -161,12 +181,13 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
       _error = null;
       _loading = true;
     });
-    _loadMore();
+    _loadMore(restore: true);
   }
 
   void _seeAgain() {
     HapticFeedback.lightImpact();
-    _seeingAgain = true;
+    _seeingAgain = true; // mode=all؛ صفِ مستقلِ خودش رو داره
+    _excluded.clear();
     _reload();
   }
 
@@ -202,6 +223,8 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
 
   void _onSwiped(DiscoveryCandidate c, SwipeDirection dir) {
     final direction = _dirName(dir);
+    _excluded.add(c.publicId);
+    _feed?.markSeen(c.publicId);
     setState(() {
       _expandedId = null;
       _lockedId = null;
@@ -210,23 +233,39 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
     // اکشنِ تکراری هیچ تغییری تو بک‌اند نمی‌ده، پس چیزی هم برای Rewind نیست.
     final pushed = swipeChangesState(c.previousDirection, direction);
     if (pushed) RewindMemory.instance.push(c, dir); // حافظه‌ی session، مشترک با تب سواپ
-    if (_stack.length < 5) _loadMore();
+    _maybeLoadNext();
     _precacheTop();
 
     // اکشنِ بی‌اثر → درخواستی نمی‌فرستیم (سرور هم همین قوانین رو داره).
     if (!pushed) return;
 
+    // رد: جوابِ فوری نمی‌خواد؛ تو صفِ ارسال می‌ره و همراهِ لایکِ بعدی (یا با تایمر) یکجا
+    // فرستاده می‌شه. (Rewindِ یه ردِ هنوز-ارسال‌نشده هم هیچ درخواستی نمی‌خواد.)
+    if (direction == 'pass') {
+      SwipeOutbox.instance.add(c.publicId);
+      return;
+    }
+    final pending = SwipeOutbox.instance.pendingForPiggyback();
+
     RewindMemory.instance
-        .enqueue(() => ApiClient.swipe(c.publicId, direction))
+        .enqueue(() => ApiClient.swipe(c.publicId, direction, pendingPasses: pending))
         .then((result) {
+      SwipeOutbox.instance.confirmSent(pending);
       if (!result.changed && pushed) {
         RewindMemory.instance.discardLatestFor(c.publicId);
       }
+      if (direction == 'super_like' && result.changed) {
+        SubscriptionState.instance.noteSuperLikeSpent();
+      } else if (direction == 'like' && result.changed) {
+        SubscriptionState.instance.noteLikeSpent();
+      }
+      if (result.matched) LikesStore.instance.remove(c.publicId);
       if (result.matched && result.match != null) {
         RewindMemory.instance.discardLatestFor(c.publicId);
         if (mounted) _showMatchDialog(result.match!);
       }
-    }).catchError((_) {
+    }).catchError((Object e) {
+      _handleSwipeError(e);
       RewindMemory.instance.discardLatestFor(c.publicId);
     });
   }
@@ -237,11 +276,21 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
     final memory = RewindMemory.instance;
     final last = memory.latest;
     if (last == null || _deck.isFlying || _rewinding) return;
+    // Rewind قابلیتِ اشتراکیه (سرور هم چک می‌کنه).
+    if (SubscriptionState.instance.loaded && !SubscriptionState.instance.isPremium) {
+      showPremiumPaywall(context, PaywallReason.rewind);
+      return;
+    }
     _rewinding = true;
     try {
-      await memory.enqueue(() => ApiClient.rewind(last.candidate.publicId));
+      if (!SwipeOutbox.instance.removeIfQueued(last.candidate.publicId)) {
+        await SwipeOutbox.instance.flush();
+        await memory.enqueue(() => ApiClient.rewind(last.candidate.publicId));
+      }
       memory.remove(last);
       if (!mounted) return;
+      _excluded.remove(last.candidate.publicId);
+      _feed?.unmarkSeen(last.candidate.publicId);
       _deck.prepareRewind(last.direction);
       setState(() {
         _expandedId = null;
@@ -266,12 +315,14 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
   }
 
   void _removeBlocked(DiscoveryCandidate c) {
+    _excluded.add(c.publicId);
+    _feed?.markSeen(c.publicId);
     setState(() {
       _expandedId = null;
       _lockedId = null;
       _stack = _stack.where((x) => x.publicId != c.publicId).toList();
     });
-    if (_stack.length < 5) _loadMore();
+    _maybeLoadNext();
     _precacheTop();
   }
 
@@ -282,6 +333,54 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
     if (!mounted) return;
     if (r.removed) setState(() {});
     if (r.message != null) _toast(r.message!);
+  }
+
+  // ---------------------------------------------------------------------
+  // قفلِ سوپرلایک (اشتراک + سهمیه‌ی روزانه)
+  // ---------------------------------------------------------------------
+
+  void _onSubscriptionChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// کشیدنِ کارت به بالا / دکمه‌ی ⭐: اگه کاربر اشتراک نداره یا سهمیه‌ی امروزش
+  /// تموم شده، کارت برمی‌گرده و پیام نشون داده می‌شه. (سرور هم دوباره چک می‌کنه.)
+  bool _canSwipe(DiscoveryCandidate c, SwipeDirection dir) {
+    if (dir == SwipeDirection.right) {
+      // لایکِ بی‌اثر (قبلاً لایک/سوپرلایک شده) مصرفِ سهمیه ندارد.
+      if (!swipeChangesState(c.previousDirection, 'like')) return true;
+      return SubscriptionState.instance.canLike;
+    }
+    if (dir != SwipeDirection.up) return true;
+    // سوپرلایکِ بی‌اثر (قبلاً سوپرلایک شده) مصرفِ سهمیه نداره.
+    if (!swipeChangesState(c.previousDirection, 'super_like')) return true;
+    return SubscriptionState.instance.canSuperLike;
+  }
+
+  void _onBlocked(DiscoveryCandidate c, SwipeDirection dir) {
+    final s = SubscriptionState.instance;
+    if (dir == SwipeDirection.right) {
+      showPremiumPaywall(context, PaywallReason.likeLimit);
+    } else if (!s.isPremium) {
+      showPremiumPaywall(context, PaywallReason.superLike);
+    } else {
+      _toast('سوپرلایک‌های امروزت تموم شد. فردا دوباره ${s.superLikesDaily} تا داری.');
+    }
+  }
+
+  /// خطاهای قفلِ سوپرلایک که سرور برمی‌گردونه (وقتی وضعیتِ اپ قدیمی بوده).
+  void _handleSwipeError(Object e) {
+    if (e is! ApiException || !mounted) return;
+    if (e.code == 'premium_required') {
+      SubscriptionState.instance.refresh();
+      showPremiumPaywall(context, PaywallReason.superLike);
+    } else if (e.code == 'super_like_limit') {
+      SubscriptionState.instance.refresh();
+      _toast('سوپرلایک‌های امروزت تموم شد.');
+    } else if (e.code == 'like_limit') {
+      SubscriptionState.instance.refresh();
+      showPremiumPaywall(context, PaywallReason.likeLimit);
+    }
   }
 
   void _toast(String message) {
@@ -464,6 +563,8 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
           controller: _deck,
           superLikeEnabled: true,
           swipeEnabled: _stack.first.publicId != _lockedId,
+          canSwipe: _canSwipe,
+          onBlocked: _onBlocked,
           onSwiped: _onSwiped,
           itemBuilder: (context, c) => SwipeProfileCard(
             key: ValueKey(c.publicId),
@@ -522,6 +623,7 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
                 _stack.isNotEmpty && _stack.first.previousDirection == 'super_like',
             onRemoveLike: _removeLikeOnTop,
             litToken: _stack.isNotEmpty ? _stack.first.publicId : null,
+            superLikeLocked: SubscriptionState.instance.loaded && !SubscriptionState.instance.isPremium,
             hideActions: _expandedId != null,
             hideSend: _lockedId != null,
             onPass: () => _deck.swipe(SwipeDirection.left),

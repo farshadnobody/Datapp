@@ -9,6 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'models/profile_models.dart';
 import 'models/match_models.dart';
 import 'models/chat_models.dart';
+import 'subscription/subscription_state.dart';
+import 'promo/promo_models.dart';
 
 // ============================================================
 // این مقدار دستی تنظیم نمی‌شه — موقع استارت اپ (قبل از نمایش هر صفحه‌ای)
@@ -250,9 +252,13 @@ class ApiClient {
   }
 
   static Future<ProfileOptions> fetchProfileOptions() async {
-    // هر بار فقط با ETag (= «نسخه‌ی» داده) از سرور می‌پرسه «عوض شده؟». اگه نه، سرور
-    // یه 304 خالی می‌ده و همون کشِ گوشی استفاده می‌شه؛ اگه آره، نسخه‌ی سرور جایگزین
-    // می‌شه (سرور همیشه مرجعه).
+    // اول نسخه‌ای که bootstrap ذخیره کرده (و سرور تضمین می‌کنه تازه‌ست)؛ هیچ درخواستی
+    // نمی‌ره. فقط اگه هنوز چیزی ذخیره نشده، مستقیم از سرور (با ETag) می‌گیره.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cached = prefs.getString('bs_options_json');
+      if (cached != null) return ProfileOptions.fromJson(jsonDecode(cached));
+    } catch (_) {}
     final response =
         await _getCached('/api/profile/options', cacheKey: 'options');
     if (response.statusCode != 200) {
@@ -418,8 +424,12 @@ class ApiClient {
     int limit = 20,
     List<String> exclude = const [],
     bool includeSwiped = false,
+    bool lean = false, // کارتِ سبک (سواپ و اکسپلور)؛ جزئیات با زدنِ فلشِ کارت
+    String? exploreId, // فقط وقتی یه دسته‌ی اکسپلور واقعاً باز شده؛ فیلترش سمتِ سرور اعمال می‌شه
   }) async {
     final params = <String, String>{'limit': '$limit'};
+    if (lean) params['lean'] = '1';
+    if (exploreId != null && exploreId.isNotEmpty) params['explore_id'] = exploreId;
     if (minAge != null) params['min_age'] = '$minAge';
     if (maxAge != null) params['max_age'] = '$maxAge';
     if (maxDistanceKm != null) params['max_distance_km'] = '$maxDistanceKm';
@@ -457,15 +467,36 @@ class ApiClient {
     return DiscoveryCandidate.fromJson(jsonDecode(response.body));
   }
 
-  static Future<SwipeResult> swipe(String publicId, String direction) async {
+  static Future<SwipeResult> swipe(String publicId, String direction,
+      {List<String> pendingPasses = const []}) async {
     final response = await _post(
-        '/api/discovery/swipe', {'public_id': publicId, 'direction': direction},
+        '/api/discovery/swipe',
+        {
+          'public_id': publicId,
+          'direction': direction,
+          // ردهای جمع‌شده همراهِ همین درخواست می‌رن (به‌جای یه درخواستِ جدا)
+          if (pendingPasses.isNotEmpty) 'pending_passes': pendingPasses,
+        },
         authenticated: true);
     final data = jsonDecode(response.body);
     if (response.statusCode != 200) {
       throw ApiException(data['error'] ?? 'unknown_error');
     }
     return SwipeResult.fromJson(data);
+  }
+
+  /// POST /api/discovery/swipes/batch — چندتا «رد» یکجا (حداکثر ۱۰۰).
+  static Future<void> swipeBatch(List<String> publicIds) async {
+    final response = await _post(
+        '/api/discovery/swipes/batch',
+        {
+          'swipes': [for (final id in publicIds) {'public_id': id, 'direction': 'pass'}],
+        },
+        authenticated: true);
+    if (response.statusCode != 200) {
+      final data = jsonDecode(response.body);
+      throw ApiException(data['error'] ?? 'unknown_error');
+    }
   }
 
   /// POST /api/discovery/rewind {public_id}
@@ -514,6 +545,85 @@ class ApiClient {
   /// GET /api/likes/summary
   /// جواب: {"count": N, "preview_photo_urls": [...]} — عکس‌های پیش‌نمایش
   /// باید از سمت بک‌اند محوشده/سانسورشده بیان (چون هنوز متچ نشدن).
+  /// GET /api/subscription — وضعیتِ اشتراک و سهمیه‌ی امروزِ سوپرلایک.
+  static Future<SubscriptionStatus> fetchSubscription() async {
+    final response = await _get('/api/subscription', authenticated: true);
+    if (response.statusCode != 200) {
+      final data = jsonDecode(response.body);
+      throw ApiException(data['error'] ?? 'unknown_error');
+    }
+    return SubscriptionStatus.fromJson(jsonDecode(response.body));
+  }
+
+  /// GET /api/promos — پاپ‌آپ‌ها و باکس‌های شناورِ فعال (با ETag؛ اگه عوض نشده
+  /// فقط یه 304 خالی).
+  /// GET /api/likes/ids?limit=30&cursor=... (فقط اشتراکی‌ها) — صفحه‌ی سی‌تاییِ شناسه + version.
+  /// جواب: {items:[{public_id,version,is_super_like,liked_at}], next_cursor, count, super_like_count}
+  static Future<Map<String, dynamic>> fetchLikesIds({String? cursor, int limit = 30}) async {
+    final uri = Uri.parse('$backendBaseUrl/api/likes/ids').replace(queryParameters: {
+      'limit': '$limit',
+      if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+    });
+    final response = await _getUri(uri, authenticated: true);
+    final data = jsonDecode(response.body);
+    if (response.statusCode != 200) {
+      throw ApiException((data is Map ? data['error'] : null) ?? 'unknown_error');
+    }
+    return data as Map<String, dynamic>;
+  }
+
+  /// POST /api/likes/cards {ids:[..≤50]} (فقط اشتراکی‌ها) — کارتِ سبک با version.
+  static Future<List<DiscoveryCandidate>> fetchLikesCards(List<String> ids) async {
+    final response = await _post('/api/likes/cards', {'ids': ids}, authenticated: true);
+    final data = jsonDecode(response.body);
+    if (response.statusCode != 200) {
+      throw ApiException((data is Map ? data['error'] : null) ?? 'unknown_error');
+    }
+    return (data as List).map((e) => DiscoveryCandidate.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// POST /api/likes/sync — دیگه توسط کلاینتِ جدید صدا زده نمی‌شه (سمتِ سرور برای
+  /// سازگاری باقی مونده).
+  static Future<Map<String, dynamic>> syncLikes({required List<String> have}) async {
+    final response = await _post('/api/likes/sync', {'have': have}, authenticated: true);
+    final data = jsonDecode(response.body);
+    if (response.statusCode != 200) {
+      throw ApiException((data is Map ? data['error'] : null) ?? 'unknown_error');
+    }
+    return data as Map<String, dynamic>;
+  }
+
+  /// GET /api/bootstrap — «درخواستِ اولیه»: اشتراک + سهمیه‌ها + تعدادِ لایک‌ها + نسخه‌ها؛
+  /// تبلیغ‌ها/پلن‌ها/گزینه‌ها فقط وقتی میان که نسخه‌شون با نسخه‌ی اپ فرق داشته باشه.
+  static Future<Map<String, dynamic>> bootstrap({
+    String? promosVersion,
+    String? plansVersion,
+    String? optionsVersion,
+    bool likesCounts = false,
+  }) async {
+    final uri = Uri.parse('$backendBaseUrl/api/bootstrap').replace(queryParameters: {
+      if (likesCounts) 'lc': '1',
+      if (promosVersion != null) 'pv': promosVersion,
+      if (plansVersion != null) 'plv': plansVersion,
+      if (optionsVersion != null) 'ov': optionsVersion,
+    });
+    final response = await _getUri(uri, authenticated: true);
+    if (response.statusCode != 200) {
+      throw ApiException('bootstrap_unavailable');
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  static Future<List<Promo>> fetchPromos() async {
+    final response = await _getCached('/api/promos',
+        cacheKey: 'promos:${AuthSession.phone}', authenticated: true);
+    if (response.statusCode != 200) {
+      throw ApiException('promos_unavailable');
+    }
+    final list = jsonDecode(response.body) as List;
+    return list.map((e) => Promo.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
   static Future<LikesSummary> fetchLikesSummary() async {
     final response = await _get('/api/likes/summary', authenticated: true);
     if (response.statusCode != 200) {
@@ -594,16 +704,43 @@ class ApiClient {
     }
   }
 
-  static Future<List<ChatMessage>> fetchMessages(String withPublicId) async {
-    final uri = Uri.parse('$backendBaseUrl/api/messages/history')
-        .replace(queryParameters: {'with': withPublicId});
+  /// GET /api/messages/history?with=<id>[&before=<id>][&after=<id>&epoch=<n>]
+  /// صفحه‌های ۵۰تایی؛ کاربرِ رایگان فقط ۵۰ پیامِ آخر رو می‌گیره (بقیه locked).
+  ///  - before: پیام‌های قدیمی‌تر از این شناسه (صفحه‌ی قبلی)
+  ///  - after + epoch: فقط پیام‌های «جدیدتر» از آخرینِ کشِ گوشی (اگه گفتگو پاک شده
+  ///    باشه، سرور reset=true برمی‌گردونه)
+  static Future<MessagesPage> fetchMessages(String withPublicId,
+      {int? before, int? after, int? epoch}) async {
+    final uri = Uri.parse('$backendBaseUrl/api/messages/history').replace(queryParameters: {
+      'with': withPublicId,
+      if (before != null && before > 0) 'before': '$before',
+      if (after != null && after > 0) 'after': '$after',
+      if (after != null && after > 0 && epoch != null) 'epoch': '$epoch',
+    });
     final response = await _getUri(uri, authenticated: true);
     if (response.statusCode != 200) {
       final data = jsonDecode(response.body);
       throw ApiException(data['error'] ?? 'unknown_error');
     }
-    final list = jsonDecode(response.body) as List;
-    return list.map((e) => ChatMessage.fromJson(e)).toList();
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final list = (data['messages'] as List?) ?? const [];
+    return MessagesPage(
+      messages: list.map((e) => ChatMessage.fromJson(e)).toList(),
+      hasMore: data['has_more'] ?? false,
+      locked: data['locked'] ?? false,
+      epoch: (data['epoch'] as num?)?.toInt() ?? 0,
+      reset: data['reset'] ?? false,
+    );
+  }
+
+  /// POST /api/messages/clear  {public_id} — پیام‌های مکالمه برای هر دو طرف پنهان می‌شه.
+  static Future<void> clearConversation(String publicId) async {
+    final response =
+        await _post('/api/messages/clear', {'public_id': publicId}, authenticated: true);
+    if (response.statusCode != 200) {
+      final data = jsonDecode(response.body);
+      throw ApiException(data['error'] ?? 'unknown_error');
+    }
   }
 
   static Future<ChatMessage> sendMessage(String toPublicId, String body) async {
@@ -624,5 +761,13 @@ class ApiClient {
         .replaceFirst('https://', 'wss://')
         .replaceFirst('http://', 'ws://');
     return '$wsBase/ws?token=${AuthSession.token}';
+  }
+
+  /// آدرسِ WebSocket بدونِ توکن (توکن تو هدرِ Authorization می‌ره).
+  static String get webSocketBaseUrl {
+    final wsBase = backendBaseUrl
+        .replaceFirst('https://', 'wss://')
+        .replaceFirst('http://', 'ws://');
+    return '$wsBase/ws';
   }
 }

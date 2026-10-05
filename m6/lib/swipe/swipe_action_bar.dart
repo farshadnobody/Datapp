@@ -28,6 +28,9 @@ class SwipeActionBar extends StatelessWidget {
   /// شناسه‌ی کارتِ بالا؛ با عوض شدنش افکتِ «از قبل لایک شده» دوباره پخش می‌شه.
   final String? litToken;
 
+  /// true → کاربر اشتراک نداره: یه قفلِ کوچیک روی دکمه‌ی سوپرلایک.
+  final bool superLikeLocked;
+
   /// true → ضربدر/ستاره/قلب/واگرد با محو و کوچیک شدن هاید می‌شن (دکمه‌ی ارسال
   /// سر جاش می‌مونه). وقتی اطلاعاتِ پروفایل باز شده استفاده می‌شه.
   final bool hideActions;
@@ -50,6 +53,7 @@ class SwipeActionBar extends StatelessWidget {
     this.superLikeLit = false,
     this.onRemoveLike,
     this.litToken,
+    this.superLikeLocked = false,
     this.hideActions = false,
     this.hideSend = false,
     required this.onPass,
@@ -176,7 +180,7 @@ class SwipeActionBar extends StatelessWidget {
         final t = superLikeLit ? 1.0 : p.superLike;
         final bg = Color.lerp(SwipeColors.buttonBg, SwipeColors.superLike, t)!;
         final fg = Color.lerp(SwipeColors.superLikeSoft, Colors.white, t)!;
-        return _HintAnchor(
+        final anchor = _HintAnchor(
           lit: superLikeLit && onRemoveLike != null,
           token: litToken,
           color: SwipeColors.superLike,
@@ -191,6 +195,29 @@ class SwipeActionBar extends StatelessWidget {
             onLongPress: superLikeLit ? onRemoveLike : null,
             child: Icon(Icons.star_rounded, size: 26, color: fg),
           ),
+        );
+        if (!superLikeLocked) return anchor;
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            anchor,
+            Positioned(
+              top: -3,
+              right: -3,
+              child: IgnorePointer(
+                child: Container(
+                  width: 19,
+                  height: 19,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1C1C1E),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: SwipeColors.buttonBorder),
+                  ),
+                  child: const Icon(Icons.lock_rounded, size: 11, color: Colors.white70),
+                ),
+              ),
+            ),
+          ],
         );
       },
     );

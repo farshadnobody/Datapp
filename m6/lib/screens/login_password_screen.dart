@@ -54,11 +54,15 @@ class _LoginPasswordScreenState extends State<LoginPasswordScreen> {
     } on NetworkException {
       setState(() => _errorText =
           'ارتباط با سرور برقرار نشد. مطمئن شو بک‌اند روشنه و آدرس سرور تو api_client.dart درسته.');
-    } on ApiException {
+    } on ApiException catch (e) {
       setState(() {
         // پیام یکسان برای شماره‌ی اشتباه و پسورد اشتباه — عمداً، تا کسی نفهمه
-        // کدومش اشتباه بوده.
-        _errorText = 'شماره موبایل یا رمز عبور اشتباهه.';
+        // کدومش اشتباه بوده. بعد از چند تلاشِ ناموفق سرور موقتاً قفل می‌کنه.
+        _errorText = e.code == 'too_many_requests'
+            ? 'تعداد تلاش‌های ناموفق زیاد بود. ۱۵ دقیقه‌ی دیگه دوباره امتحان کن.'
+            : e.code == 'account_banned'
+                ? 'این حساب توسط پشتیبانی مسدود شده.'
+                : 'شماره موبایل یا رمز عبور اشتباهه.';
       });
     } catch (e) {
       setState(() => _errorText = 'خطایی رخ داد. دوباره امتحان کن.');

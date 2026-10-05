@@ -38,7 +38,9 @@ class _CodeRequestScreenState extends State<CodeRequestScreen> {
     } on ApiException catch (e) {
       setState(() => _errorText = e.code == 'invalid_phone'
           ? 'شماره وارد شده نامعتبره. دوباره چک کن.'
-          : 'خطایی رخ داد. دوباره امتحان کن.');
+          : e.code == 'too_many_requests'
+              ? 'درخواست‌های زیادی فرستادی. کمی صبر کن و دوباره امتحان کن.'
+              : 'خطایی رخ داد. دوباره امتحان کن.');
     } catch (e) {
       setState(() => _errorText = 'خطایی رخ داد. دوباره امتحان کن.');
     } finally {

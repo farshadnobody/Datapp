@@ -215,7 +215,7 @@ class MyProfile {
   final String interestedIn;
   final String bio;
   final List<String> interests;
-  final List<PromptAnswer> prompts;
+  List<PromptAnswer> prompts; // جزئیات: با زدنِ فلشِ کارت پر می‌شه (applyDetails)
   final List<Photo> photos;
   final String publicId;
 
@@ -280,9 +280,13 @@ class MyProfile {
         prompts: (json['prompts'] as List? ?? [])
             .map((e) => PromptAnswer.fromJson(e))
             .toList(),
-        photos: (json['photos'] as List? ?? [])
-            .map((e) => Photo.fromJson(e))
-            .toList(),
+        // کارتِ سبک: عکس‌ها فقط رشته‌ی آدرسن؛ کارتِ کامل: آبجکت.
+        photos: [
+          for (final e in (json['photos'] as List? ?? const []).asMap().entries)
+            e.value is String
+                ? Photo(id: '', url: e.value as String, position: e.key)
+                : Photo.fromJson(e.value),
+        ],
         publicId: json['public_id'] ?? '',
         genders: List<String>.from(json['genders'] ?? []),
         showGenderOnProfile: json['show_gender_on_profile'] ?? true,
@@ -320,19 +324,41 @@ class DiscoveryCandidate {
   final List<PromptAnswer> prompts;
   final List<Photo> photos;
   final double? distanceKm;
+
+  /// نسخه‌ی کارت = profiles.updated_at سرور به میلی‌ثانیه (UnixMilli). CardCache با همین
+  /// تصمیم می‌گیره کارت دوباره دانلود بشه یا نه. اگه سرور نفرستاد 0.
+  final int version;
+
   // null یعنی هیچ‌وقت swipe نشده. بعد از «برداشتنِ لایک» تو همین session صفر می‌شه.
   String? previousDirection;
 
   // --- فیلدهای اختیاریِ کارت سبک تیندر ---
   // اگه بک‌اند (Go) این‌ها رو تو JSON بفرسته، روی کارت نشون داده می‌شن؛
   // اگه نفرسته، فقط همون بخش از کارت نمایش داده نمی‌شه (اپ خراب نمی‌شه).
-  final String? lookingFor; // مثلاً "long_term"
-  final String? educationLevel;
-  final Map<String, String> lifestyle; // {"drinking": "sober", ...}
-  final Map<String, String> aboutYou; // {"communication": "phone_caller", ...}
-  final String? activityStatus; // 'active' | 'recent' | 'new' | null
-  final String? wantChildren; // مثلاً "want_children" — برای دسته‌ی «بچه می‌خوام» تو اکسپلور
-  final bool verified; // برای دسته‌ی «تأیید عکس» تو اکسپلور؛ اگه بک‌اند نفرسته false می‌مونه
+  String? lookingFor; // مثلاً "long_term"
+  String? educationLevel;
+  Map<String, String> lifestyle; // {"drinking": "sober", ...}
+  Map<String, String> aboutYou; // {"communication": "phone_caller", ...}
+  String? activityStatus; // 'active' | 'recent' | 'new' | null
+  String? wantChildren; // مثلاً "want_children" — برای دسته‌ی «بچه می‌خوام» تو اکسپلور
+  bool verified; // برای دسته‌ی «تأیید عکس» تو اکسپلور؛ اگه بک‌اند نفرسته false می‌مونه
+
+  /// false = کارتِ «سبک» (فقط شناسه، نام، سن، درباره، علایق، عکس‌ها). جزئیات (پرامپت،
+  /// سبک زندگی، تحصیلات...) با زدنِ فلشِ کارت از /api/discovery/profile گرفته می‌شه.
+  bool detailsLoaded;
+
+  /// جزئیاتِ گرفته‌شده از سرور رو روی همین کارت می‌ذاره.
+  void applyDetails(DiscoveryCandidate full) {
+    prompts = full.prompts;
+    lookingFor = full.lookingFor;
+    educationLevel = full.educationLevel;
+    lifestyle = full.lifestyle;
+    aboutYou = full.aboutYou;
+    activityStatus = full.activityStatus;
+    wantChildren = full.wantChildren;
+    verified = full.verified;
+    detailsLoaded = true;
+  }
 
   /// true فقط وقتی بک‌اند تأیید کرده که این آدم واقعاً (تو دیتابیس) کاربرِ فعلی رو
   /// سوپرلایک کرده و هنوز متچ/آنمتچ/بلاکی نیست. هیچ‌وقت از استیت لوکال ساخته
@@ -348,6 +374,7 @@ class DiscoveryCandidate {
     required this.prompts,
     required this.photos,
     required this.distanceKm,
+    this.version = 0,
     this.previousDirection,
     this.lookingFor,
     this.educationLevel,
@@ -357,6 +384,7 @@ class DiscoveryCandidate {
     this.wantChildren,
     this.verified = false,
     this.superLikedMe = false,
+    this.detailsLoaded = true,
   });
 
   factory DiscoveryCandidate.fromJson(Map<String, dynamic> json) =>
@@ -369,12 +397,11 @@ class DiscoveryCandidate {
         prompts: (json['prompts'] as List? ?? [])
             .map((e) => PromptAnswer.fromJson(e))
             .toList(),
-        photos: (json['photos'] as List? ?? [])
-            .map((e) => Photo.fromJson(e))
-            .toList(),
+        photos: _photosFrom(json['photos']),
         distanceKm: json['distance_km'] == null
             ? null
             : (json['distance_km'] as num).toDouble(),
+        version: (json['version'] as num?)?.toInt() ?? 0,
         previousDirection: json['previous_direction'],
         lookingFor: json['looking_for'] as String?,
         educationLevel: json['education_level'] as String?,
@@ -384,7 +411,37 @@ class DiscoveryCandidate {
         wantChildren: json['want_children'] as String?,
         verified: json['verified'] ?? false,
         superLikedMe: json['super_liked_me'] ?? false,
+        detailsLoaded: json['lean'] != true,
       );
+
+  // کارتِ سبکِ سرور عکس‌ها رو فقط به‌صورتِ آدرس (String) می‌فرسته؛ کارتِ کامل Map.
+  static List<Photo> _photosFrom(dynamic raw) {
+    final list = raw as List? ?? const [];
+    final out = <Photo>[];
+    for (var i = 0; i < list.length; i++) {
+      final e = list[i];
+      if (e is String) {
+        out.add(Photo(id: '', url: e, position: i));
+      } else {
+        out.add(Photo.fromJson(e as Map<String, dynamic>));
+      }
+    }
+    return out;
+  }
+
+  /// فقط «محتوای کارت» (چیزی که با version عوض می‌شه) — برای CardCache. فیلدهای وابسته
+  /// به بیننده (previous_direction، super_liked_me، فاصله) عمداً نیستن؛ اون‌ها تو
+  /// صف/لیستِ هر صفحه نگه داشته می‌شن، نه تو کش.
+  Map<String, dynamic> toCacheJson() => {
+        'public_id': publicId,
+        'name': name,
+        'age': age,
+        'bio': bio,
+        'interests': interests,
+        'photos': [for (final p in photos) p.url],
+        'version': version,
+        'lean': true,
+      };
 
   // اگه بک‌اند مستقیم `activity_status` بفرسته همون رو می‌گیریم؛ وگرنه از
   // `created_at` و `last_active_at` (ISO 8601) حسابش می‌کنیم.

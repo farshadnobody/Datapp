@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import '../api_client.dart';
 import '../likes/likes_data.dart';
 import '../widgets/app_network_image.dart';
+import '../likes/likes_store.dart';
+import '../bootstrap/bootstrap_service.dart';
 
 /// تب «لایک‌ها» — دقیقاً شبیهِ صفحه‌ی Likes You تیندر:
 ///   • هدر با تعدادِ کسایی که لایکت کرده‌ان.
@@ -27,16 +29,49 @@ class LikesScreen extends StatefulWidget {
 class _LikesScreenState extends State<LikesScreen> {
   late Future<List<LikeEntry>> _future;
   final List<LikeEntry> _likes = [];
+  final ScrollController _scroll = ScrollController();
+  bool _firstLoadDone = false; // اشتراکی: صفحه‌ی اولِ IDها یه بار جواب داده
 
   @override
   void initState() {
     super.initState();
+    // داده از روی گوشیه (بدونِ درخواست): اشتراکی‌ها از LikesStore، رایگان‌ها از شمارنده.
+    // با sync/رویدادهای سرور که چیزی عوض شد، خودکار دوباره ساخته می‌شه.
+    LikesStore.instance.addListener(_onSourceChanged);
+    AppCounters.instance.addListener(_onSourceChanged);
+    _scroll.addListener(_onScroll);
     _future = fetchLikesYou().then((v) {
       _likes
         ..clear()
         ..addAll(v);
       return v;
     });
+    if (widget.isPremium) {
+      // لایک‌ها فقط وقتی صفحه‌ی Likes واقعاً باز شده لود می‌شن (نه تو bootstrap):
+      // صفحه‌ی اولِ IDها → مقایسه‌ی version با CardCache → فقط missing/stale دانلود.
+      LikesStore.instance.screenOpen = true;
+      LikesStore.instance.refreshFirstPage().whenComplete(() {
+        if (mounted) setState(() => _firstLoadDone = true);
+      });
+    }
+  }
+
+  void _onScroll() {
+    if (!widget.isPremium || !_scroll.hasClients) return;
+    if (_scroll.position.extentAfter < 600) LikesStore.instance.loadMore();
+  }
+
+  @override
+  void dispose() {
+    LikesStore.instance.screenOpen = false;
+    LikesStore.instance.removeListener(_onSourceChanged);
+    AppCounters.instance.removeListener(_onSourceChanged);
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _onSourceChanged() {
+    if (mounted) _refresh();
   }
 
   void _onTapCard(LikeEntry entry) {
@@ -76,6 +111,7 @@ class _LikesScreenState extends State<LikesScreen> {
     // «متچ» فیک نشون داده می‌شد). فقط بعد از جوابِ سرور لیست عوض می‌شه.
     try {
       final result = await ApiClient.swipe(entry.candidate.publicId, liked ? 'like' : 'pass');
+      LikesStore.instance.remove(entry.candidate.publicId); // فقط از لیست؛ کارت تو CardCache می‌مونه
       if (!mounted) return;
       setState(() => _likes.remove(entry));
       if (result.matched) {
@@ -85,7 +121,7 @@ class _LikesScreenState extends State<LikesScreen> {
     } on ApiException catch (e) {
       if (!mounted) return;
       if (e.code == 'already_matched' || e.code == 'profile_not_found') {
-        await _refresh(); // وضعیت تو بک‌اند عوض شده؛ لیست رو از سرور می‌گیریم.
+        await LikesStore.instance.refreshFirstPage(); // وضعیت تو بک‌اند عوض شده؛ فقط صفحه‌ی اول.
       } else {
         _toast('ثبت انجام نشد. دوباره تلاش کن.');
       }
@@ -102,6 +138,7 @@ class _LikesScreenState extends State<LikesScreen> {
         _likes
           ..clear()
           ..addAll(fresh);
+        _future = Future.value(fresh);
       });
     } catch (_) {}
   }
@@ -172,11 +209,19 @@ class _LikesScreenState extends State<LikesScreen> {
               return const Center(child: CircularProgressIndicator(color: Colors.white70));
             }
             if (_likes.isEmpty) {
+              if (widget.isPremium && !_firstLoadDone) {
+                return const Center(child: CircularProgressIndicator(color: Colors.white70));
+              }
               return _EmptyLikes(topPad: topPad);
             }
             final superLikes = _likes.where((e) => e.isSuperLike).toList();
             final normalLikes = _likes.where((e) => !e.isSuperLike).toList();
+            // اشتراکی: تعدادِ کلِ لایک‌ها از سرور (نه فقط صفحه‌های لودشده).
+            final totalLikes = widget.isPremium
+                ? (LikesStore.instance.count > _likes.length ? LikesStore.instance.count : _likes.length)
+                : _likes.length;
             return CustomScrollView(
+              controller: _scroll,
               slivers: [
                 SliverPadding(
                   padding: EdgeInsets.only(top: topPad > 0 ? 0 : 8),
@@ -194,11 +239,21 @@ class _LikesScreenState extends State<LikesScreen> {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
                     child: Text(
-                      '${_likes.length} نفر پروفایلتو لایک کرده‌ان',
+                      '$totalLikes نفر پروفایلتو لایک کرده‌ان',
                       style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 15),
                     ),
                   ),
                 ),
+                if (!widget.isPremium)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(20, 0, 20, 14),
+                      child: Text(
+                        'برای کاربرهای عادی، تعدادِ لایک‌ها هر یک ساعت به‌روز می‌شه.',
+                        style: TextStyle(color: Color(0xFF6D6D72), fontSize: 12.5, height: 1.5),
+                      ),
+                    ),
+                  ),
                 if (!widget.isPremium)
                   SliverToBoxAdapter(
                     child: Padding(
@@ -246,6 +301,19 @@ class _LikesScreenState extends State<LikesScreen> {
                     ),
                   ),
                 ],
+                if (widget.isPremium && (LikesStore.instance.loadingMore || LikesStore.instance.hasMore))
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white54),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             );
           },
@@ -357,7 +425,19 @@ class _LikeCard extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               Positioned.fill(
-                child: photoUrl.isEmpty
+                child: (locked || entry.locked)
+                    ? Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topRight,
+                            end: Alignment.bottomLeft,
+                            colors: entry.isSuperLike
+                                ? const [Color(0xFF3D9CF0), Color(0xFF6A4CE0)]
+                                : const [Color(0xFFB8893B), Color(0xFF8E4A7A)],
+                          ),
+                        ),
+                      )
+                    : photoUrl.isEmpty
                     ? Container(
                         color: const Color(0xFF2C2C2E),
                         child: const Icon(Icons.person, color: Color(0xFF48484A), size: 44),

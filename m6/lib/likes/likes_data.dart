@@ -13,6 +13,9 @@
 
 import '../api_client.dart';
 import '../models/profile_models.dart';
+import 'likes_store.dart';
+import '../bootstrap/bootstrap_service.dart';
+import '../subscription/subscription_state.dart';
 
 class LikeEntry {
   final DiscoveryCandidate candidate;
@@ -23,20 +26,59 @@ class LikeEntry {
     required this.candidate,
     this.isSuperLike = false,
     this.likedAt,
+    this.locked = false,
   });
 
-  factory LikeEntry.fromJson(Map<String, dynamic> json) => LikeEntry(
-        candidate: DiscoveryCandidate.fromJson(json),
-        isSuperLike: json['is_super_like'] ?? json['super_like'] ?? false,
-        likedAt: DateTime.tryParse('${json['liked_at'] ?? ''}'),
+  /// true یعنی کاربر اشتراک نداره و سرور هیچ اطلاعاتی از لایک‌کننده نفرستاده
+  /// (فقط «یه لایک/سوپرلایکِ قفل‌شده»). candidate تو این حالت خالیه.
+  final bool locked;
+
+  factory LikeEntry.fromJson(Map<String, dynamic> json) {
+    final isSuper = json['is_super_like'] ?? json['super_like'] ?? false;
+    final likedAt = DateTime.tryParse('${json['liked_at'] ?? ''}');
+    if (json['locked'] == true) {
+      return LikeEntry(
+        candidate: DiscoveryCandidate(
+          publicId: '',
+          name: '',
+          age: 0,
+          bio: '',
+          interests: const [],
+          prompts: const [],
+          photos: const [],
+          distanceKm: null,
+        ),
+        isSuperLike: isSuper,
+        likedAt: likedAt,
+        locked: true,
       );
+    }
+    return LikeEntry(
+      candidate: DiscoveryCandidate.fromJson(json),
+      isSuperLike: isSuper,
+      likedAt: likedAt,
+    );
+  }
 }
 
 /// GET /api/likes/list — لیست واقعیِ کسایی که کاربرِ لاگین‌شده رو لایک/
 /// سوپرلایک کرده‌ان ولی هنوز متچ نشدن (از بک‌اند، نه داده‌ی موک).
+///
+/// دیگه هر بار از سرور نمی‌گیره:
+///  - اشتراکی: از [LikesStore] (صفحه‌های سی‌تاییِ IDها + CardCache). لود شدنش فقط با باز شدنِ
+///    صفحه‌ی Likes شروع می‌شه (LikesScreen).
+///  - رایگان: فقط «تعداد» (از bootstrap، حداکثر هر یک ساعت به‌روز می‌شه) → خانه‌های قفل.
 Future<List<LikeEntry>> fetchLikesYou() async {
-  final rows = await ApiClient.fetchLikesList();
-  return rows.map(LikeEntry.fromJson).toList();
+  if (SubscriptionState.instance.isPremium) {
+    await LikesStore.instance.ensureLoaded();
+    return LikesStore.instance.entries;
+  }
+  final total = AppCounters.instance.likesCount.clamp(0, 200);
+  final supers = AppCounters.instance.superLikeCount;
+  return [
+    for (var i = 0; i < total; i++)
+      LikeEntry.fromJson({'locked': true, 'is_super_like': i < supers}),
+  ];
 }
 
 /// مسیرِ url تو Photo نسبیه (مثلِ '/uploads/xxx.jpg')؛ اینجا به همون

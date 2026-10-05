@@ -3,16 +3,16 @@
 // گرافیکیِ بزرگ، عنوان و تعدادِ نمایشی — دقیقاً همون چیدمانی که تیندر
 // خودش داره (نه دو بخشِ جدا با گرادیانت).
 //
-// چون بک‌اند فیلترِ سمتِ سرور برای این دسته‌ها نداره، فیلتر سمتِ کلاینت انجام
-// می‌شه: کاندیدهای معمولیِ /api/discovery گرفته می‌شن و با متدِ [matches] این
-// کلاس فیلتر می‌شن (نگاه کن به explore_category_screen.dart).
+// فیلترِ دسته‌ها کاملاً سمتِ سرور انجام می‌شه: [ExploreCategory.id] به‌عنوانِ
+// `explore_id` به GET /api/discovery فرستاده می‌شه و بک‌اند (store/explore.go) همین
+// IDها رو به شرطِ SQL تبدیل می‌کنه. هیچ فیلترِ سمتِ کلاینتی وجود نداره؛ [kind] و
+// [values] فقط توصیفِ دسته‌ان و منبعِ حقیقتِ IDها این فایله.
 //
 // عددهایی که کنارِ هر عنوان می‌بینی («count») فقط برای همون حسِ بصریِ
 // تیندره (اونم اینجا واقعی نیست، یه تخمینِ سمتِ سرور از تعدادِ پروفایل‌هاست)؛
 // اینجا چون همچین آماری از بک‌اند نمی‌گیریم، عددها ثابتن و صرفاً ظاهری‌ان.
 
 import 'package:flutter/material.dart';
-import '../models/profile_models.dart';
 
 enum ExploreKind { intent, interest, lifestyle, wantChildren, verified }
 
@@ -49,22 +49,6 @@ class ExploreCategory {
     this.values = const {},
     this.lifestyleKey,
   });
-
-  bool matches(DiscoveryCandidate c) {
-    switch (kind) {
-      case ExploreKind.intent:
-        return c.lookingFor != null && values.contains(c.lookingFor);
-      case ExploreKind.interest:
-        return c.interests.any(values.contains);
-      case ExploreKind.lifestyle:
-        final v = c.lifestyle[lifestyleKey];
-        return v != null && values.contains(v);
-      case ExploreKind.wantChildren:
-        return c.wantChildren != null && values.contains(c.wantChildren);
-      case ExploreKind.verified:
-        return c.verified;
-    }
-  }
 }
 
 /// «دسته‌های اکسپلور» — یه گریدِ تخت و پیوسته، دقیقاً به همون ترتیبی که تویِ

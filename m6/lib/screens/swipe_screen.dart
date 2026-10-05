@@ -16,6 +16,12 @@ import '../widgets/profile_detail_sheet.dart';
 import 'location_picker_screen.dart';
 import 'matches_screen.dart';
 import '../widgets/app_network_image.dart';
+import '../subscription/subscription_state.dart';
+import '../subscription/premium_paywall.dart';
+import '../swipe/swipe_outbox.dart';
+import '../likes/likes_store.dart';
+import '../cache/discovery_feed.dart';
+import '../cache/discovery_queue.dart';
 
 /// تب «Swipe» — صفحه‌ی اصلی اپ (سبک تیندر).
 ///
@@ -47,6 +53,10 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
 
   List<DiscoveryCandidate> _stack = [];
   final Set<String> _excluded = {};
+
+  /// صفِ پایدارِ روی دیسک (هر ترکیبِ فیلتر/mode یه صف) + CardCache. batch = ۲۵ کارت؛ تا
+  /// وقتی seen < ۷۰٪ و عمرِ batch < ۲۴ ساعت، Discoveryِ جدید نمی‌گیریم.
+  DiscoveryFeed? _feed;
   bool _rewinding = false;
 
   ProfileOptions? _options;
@@ -80,6 +90,7 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     RewindMemory.instance.addListener(_onRewindMemoryChanged);
+    SubscriptionState.instance.addListener(_onSubscriptionChanged);
     WidgetsBinding.instance.addObserver(this);
     widget.enterSignal?.addListener(_onEnterSwipeTab);
     _init();
@@ -92,6 +103,7 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     RewindMemory.instance.removeListener(_onRewindMemoryChanged);
+    SubscriptionState.instance.removeListener(_onSubscriptionChanged);
     widget.enterSignal?.removeListener(_onEnterSwipeTab);
     WidgetsBinding.instance.removeObserver(this);
     _deck.dispose();
@@ -109,7 +121,7 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
     // لوکیشن فقط وقتی وقت می‌گیره که واقعاً لازم باشه (≥۴۸ ساعت از آخرین
     // ارسال گذشته)؛ چون لیستِ افراد به لوکیشن نیاز داره، قبلش تمومش می‌کنیم.
     await _ensureLocation(firstEntry: true, waitAtMost: const Duration(seconds: 30));
-    await _loadMore();
+    await _loadMore(restore: true); // صفِ ذخیره‌شده روی دیسک (بعد از restartِ اپ) ادامه پیدا می‌کنه
   }
 
   void _loadOptionsAndProfile() {
@@ -249,7 +261,34 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
     return _maxDistanceKm;
   }
 
-  Future<void> _loadMore() async {
+  DiscoveryFeed _buildFeed() {
+    final mode = _browsingAgain ? 'all' : 'new';
+    final filters = 'a$_minAge-$_maxAge|d${_effectiveDistance ?? 'x'}';
+    return DiscoveryFeed(
+      key: 'swipe|$filters|$mode',
+      filters: filters,
+      mode: mode,
+      fetch: (exclude) => ApiClient.fetchDiscovery(
+        minAge: _minAge,
+        maxAge: _maxAge,
+        maxDistanceKm: _effectiveDistance,
+        limit: DiscoveryQueue.batchSize,
+        exclude: exclude,
+        includeSwiped: _browsingAgain,
+        lean: true, // فقط شناسه، نام، سن، درباره، علایق، عکس؛ بقیه با زدنِ فلشِ کارت
+      ),
+    );
+  }
+
+  /// بعد از هر swipe: فقط وقتی seen >= ۷۰٪ (یا عمرِ batch >= ۲۴ ساعت) شد batchِ بعدی.
+  /// طولِ استک معیارِ fetch نیست.
+  void _maybeLoadNext() {
+    final feed = _feed;
+    if (feed == null || _loadingMore) return;
+    if (feed.needsFetch) _loadMore();
+  }
+
+  Future<void> _loadMore({bool restore = false}) async {
     if (_loadingMore) return;
     _loadingMore = true;
     final gen = _generation;
@@ -260,19 +299,23 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
       });
     }
     try {
-      final candidates = await ApiClient.fetchDiscovery(
-        minAge: _minAge,
-        maxAge: _maxAge,
-        maxDistanceKm: _effectiveDistance,
-        exclude: _excluded.toList(),
-        includeSwiped: _browsingAgain,
-      );
+      final feed = _feed ??= _buildFeed();
+      var resolved = restore ? await feed.restore() : const <DiscoveryCandidate>[];
+      if (!mounted || gen != _generation) return;
+      // صفِ ذخیره‌شده کافیه (seen < ۷۰٪، < ۲۴h، کارت‌ها تو کش) → هیچ درخواستی نمی‌زنیم.
+      final stackEmpty = _stack.isEmpty && resolved.isEmpty;
+      if (feed.needsFetch || (stackEmpty && !feed.exhausted)) {
+        resolved = await feed.fetchNext(
+          // ردهایی که هنوز به سرور نرسیدن (تو صفِ ارسال) هم باید دوباره نشون داده نشن.
+          exclude: {..._excluded, ...SwipeOutbox.instance.ids}.toList(),
+        );
+      }
       if (!mounted || gen != _generation) return;
       final existing = _stack.map((c) => c.publicId).toSet();
       setState(() {
         _stack = [
           ..._stack,
-          ...candidates.where((c) => !existing.contains(c.publicId)),
+          ...resolved.where((c) => !existing.contains(c.publicId) && !_excluded.contains(c.publicId)),
         ];
       });
       _precacheTop();
@@ -298,13 +341,14 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
   void _reload() {
     _generation++;
     _loadingMore = false;
+    _feed = null; // کلیدِ صف از فیلتر/mode ساخته می‌شه؛ هر ترکیب صفِ خودش رو داره
     setState(() {
       _expandedId = null;
       _lockedId = null;
       _stack = [];
       _error = null;
     });
-    _loadMore();
+    _loadMore(restore: true);
   }
 
   void _seeEveryoneAgain() {
@@ -361,6 +405,7 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
   void _onSwiped(DiscoveryCandidate c, SwipeDirection dir) {
     final direction = _dirName(dir);
     _excluded.add(c.publicId);
+    _feed?.markSeen(c.publicId);
     setState(() {
       _expandedId = null;
       _lockedId = null;
@@ -371,7 +416,7 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
     // نمی‌ده، پس چیزی هم برای Rewind نیست.
     final pushed = swipeChangesState(c.previousDirection, direction);
     if (pushed) RewindMemory.instance.push(c, dir);
-    if (_stack.length < 5) _loadMore();
+    _maybeLoadNext();
     _precacheTop();
     _countOnboarding(direction);
 
@@ -379,18 +424,34 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
     // همین قوانین رو داره، پس اگه اطلاعاتِ کارت قدیمی باشه بازم امنه.
     if (!pushed) return;
 
+    // رد: جوابِ فوری نمی‌خواد؛ تو صفِ ارسال می‌ره و همراهِ لایکِ بعدی (یا با تایمر) یکجا
+    // فرستاده می‌شه. (Rewindِ یه ردِ هنوز-ارسال‌نشده هم هیچ درخواستی نمی‌خواد.)
+    if (direction == 'pass') {
+      SwipeOutbox.instance.add(c.publicId);
+      return;
+    }
+    final pending = SwipeOutbox.instance.pendingForPiggyback();
+
     RewindMemory.instance
-        .enqueue(() => ApiClient.swipe(c.publicId, direction))
+        .enqueue(() => ApiClient.swipe(c.publicId, direction, pendingPasses: pending))
         .then((result) {
+      SwipeOutbox.instance.confirmSent(pending);
       if (!result.changed && pushed) {
         RewindMemory.instance.discardLatestFor(c.publicId);
       }
+      if (direction == 'super_like' && result.changed) {
+        SubscriptionState.instance.noteSuperLikeSpent();
+      } else if (direction == 'like' && result.changed) {
+        SubscriptionState.instance.noteLikeSpent();
+      }
+      if (result.matched) LikesStore.instance.remove(c.publicId);
       if (result.matched && result.match != null) {
         // swipeِ منجر به متچ دیگه قابل‌برگشت نیست.
         RewindMemory.instance.discardLatestFor(c.publicId);
         if (mounted) _showMatchDialog(result.match!);
       }
-    }).catchError((_) {
+    }).catchError((Object e) {
+      _handleSwipeError(e);
       // ثبت swipe شکست خورد (شبکه/رد شدن تو بک‌اند)؛ چیزی تو تاریخچه‌ی بک‌اند
       // نیست، پس رکوردِ Rewindش رو هم برمی‌داریم.
       RewindMemory.instance.discardLatestFor(c.publicId);
@@ -412,12 +473,23 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
     final memory = RewindMemory.instance;
     final last = memory.latest;
     if (last == null || _deck.isFlying || _rewinding) return;
+    // Rewind قابلیتِ اشتراکیه (سرور هم چک می‌کنه).
+    if (SubscriptionState.instance.loaded && !SubscriptionState.instance.isPremium) {
+      showPremiumPaywall(context, PaywallReason.rewind);
+      return;
+    }
     _rewinding = true;
     try {
-      await memory.enqueue(() => ApiClient.rewind(last.candidate.publicId));
+      // ردِ هنوز-ارسال‌نشده: فقط از صف برداشته می‌شه (بدونِ درخواست). وگرنه اول صف خالی
+      // می‌شه (تا ترتیبِ تاریخچه تو سرور درست باشه) و بعد Rewind می‌ره.
+      if (!SwipeOutbox.instance.removeIfQueued(last.candidate.publicId)) {
+        await SwipeOutbox.instance.flush();
+        await memory.enqueue(() => ApiClient.rewind(last.candidate.publicId));
+      }
       memory.remove(last);
       if (!mounted) return;
       _excluded.remove(last.candidate.publicId);
+      _feed?.unmarkSeen(last.candidate.publicId);
       _deck.prepareRewind(last.direction);
       setState(() {
         _expandedId = null;
@@ -444,13 +516,62 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
   /// بعد از مسدودسازیِ موفق از تو کارت: کارت بدونِ ثبتِ سواپ از Deck برداشته می‌شه.
   void _removeBlocked(DiscoveryCandidate c) {
     _excluded.add(c.publicId);
+    _feed?.markSeen(c.publicId);
     setState(() {
       _expandedId = null;
       _lockedId = null;
       _stack = _stack.where((x) => x.publicId != c.publicId).toList();
     });
-    if (_stack.length < 5) _loadMore();
+    _maybeLoadNext();
     _precacheTop();
+  }
+
+  // ---------------------------------------------------------------------
+  // قفلِ سوپرلایک (اشتراک + سهمیه‌ی روزانه)
+  // ---------------------------------------------------------------------
+
+  void _onSubscriptionChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// کشیدنِ کارت به بالا / دکمه‌ی ⭐: اگه کاربر اشتراک نداره یا سهمیه‌ی امروزش
+  /// تموم شده، کارت برمی‌گرده و پیام نشون داده می‌شه. (سرور هم دوباره چک می‌کنه.)
+  bool _canSwipe(DiscoveryCandidate c, SwipeDirection dir) {
+    if (dir == SwipeDirection.right) {
+      // لایکِ بی‌اثر (قبلاً لایک/سوپرلایک شده) مصرفِ سهمیه ندارد.
+      if (!swipeChangesState(c.previousDirection, 'like')) return true;
+      return SubscriptionState.instance.canLike;
+    }
+    if (dir != SwipeDirection.up) return true;
+    // سوپرلایکِ بی‌اثر (قبلاً سوپرلایک شده) مصرفِ سهمیه نداره.
+    if (!swipeChangesState(c.previousDirection, 'super_like')) return true;
+    return SubscriptionState.instance.canSuperLike;
+  }
+
+  void _onBlocked(DiscoveryCandidate c, SwipeDirection dir) {
+    final s = SubscriptionState.instance;
+    if (dir == SwipeDirection.right) {
+      showPremiumPaywall(context, PaywallReason.likeLimit);
+    } else if (!s.isPremium) {
+      showPremiumPaywall(context, PaywallReason.superLike);
+    } else {
+      _toast('سوپرلایک‌های امروزت تموم شد. فردا دوباره ${s.superLikesDaily} تا داری.');
+    }
+  }
+
+  /// خطاهای قفلِ سوپرلایک که سرور برمی‌گردونه (وقتی وضعیتِ اپ قدیمی بوده).
+  void _handleSwipeError(Object e) {
+    if (e is! ApiException || !mounted) return;
+    if (e.code == 'premium_required') {
+      SubscriptionState.instance.refresh();
+      showPremiumPaywall(context, PaywallReason.superLike);
+    } else if (e.code == 'super_like_limit') {
+      SubscriptionState.instance.refresh();
+      _toast('سوپرلایک‌های امروزت تموم شد.');
+    } else if (e.code == 'like_limit') {
+      SubscriptionState.instance.refresh();
+      showPremiumPaywall(context, PaywallReason.likeLimit);
+    }
   }
 
   void _toast(String message) {
@@ -617,6 +738,7 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
     }
 
     _excluded.add(candidate.publicId);
+    _feed?.markSeen(candidate.publicId);
     setState(() {
       _stack = _stack.where((c) => c.publicId != candidate.publicId).toList();
     });
@@ -631,18 +753,31 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
                   : SwipeDirection.up);
     }
     if (!pushed) return; // اکشنِ بی‌اثر → درخواستی لازم نیست.
+    if (direction == 'pass') {
+      SwipeOutbox.instance.add(candidate.publicId);
+      return;
+    }
+    final pending = SwipeOutbox.instance.pendingForPiggyback();
     try {
-      final result = await RewindMemory.instance
-          .enqueue(() => ApiClient.swipe(candidate.publicId, direction));
+      final result = await RewindMemory.instance.enqueue(
+          () => ApiClient.swipe(candidate.publicId, direction, pendingPasses: pending));
+      SwipeOutbox.instance.confirmSent(pending);
       if (!result.changed && pushed) {
         RewindMemory.instance.discardLatestFor(candidate.publicId);
       }
+      if (direction == 'super_like' && result.changed) {
+        SubscriptionState.instance.noteSuperLikeSpent();
+      } else if (direction == 'like' && result.changed) {
+        SubscriptionState.instance.noteLikeSpent();
+      }
+      if (result.matched) LikesStore.instance.remove(candidate.publicId);
       if (result.matched && result.match != null) {
         RewindMemory.instance.discardLatestFor(candidate.publicId);
         if (mounted) _showMatchDialog(result.match!);
       }
-    } catch (_) {
+    } catch (e) {
       if (pushed) RewindMemory.instance.discardLatestFor(candidate.publicId);
+      _handleSwipeError(e);
     }
   }
 
@@ -919,6 +1054,8 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
           controller: _deck,
           superLikeEnabled: !_onboarding,
           swipeEnabled: _stack.first.publicId != _lockedId,
+          canSwipe: _canSwipe,
+          onBlocked: _onBlocked,
           onSwiped: _onSwiped,
           itemBuilder: (context, c) => SwipeProfileCard(
             key: ValueKey(c.publicId),
@@ -955,6 +1092,7 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
                   _stack.isNotEmpty && _stack.first.previousDirection == 'super_like',
               onRemoveLike: _removeLikeOnTop,
               litToken: _stack.isNotEmpty ? _stack.first.publicId : null,
+              superLikeLocked: SubscriptionState.instance.loaded && !SubscriptionState.instance.isPremium,
               hideActions: _expandedId != null,
               hideSend: _lockedId != null,
               onPass: () => _deck.swipe(SwipeDirection.left),

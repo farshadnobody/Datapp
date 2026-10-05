@@ -10,12 +10,17 @@ Future<bool?> showSafetyToolkitSheet(
   BuildContext context, {
   required String matchPublicId,
   required String matchName,
+  VoidCallback? onConversationCleared,
 }) {
   return showModalBottomSheet<bool>(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
-    builder: (_) => SafetyToolkitSheet(matchPublicId: matchPublicId, matchName: matchName),
+    builder: (_) => SafetyToolkitSheet(
+      matchPublicId: matchPublicId,
+      matchName: matchName,
+      onConversationCleared: onConversationCleared,
+    ),
   );
 }
 
@@ -23,7 +28,38 @@ class SafetyToolkitSheet extends StatelessWidget {
   final String matchPublicId;
   final String matchName;
 
-  const SafetyToolkitSheet({super.key, required this.matchPublicId, required this.matchName});
+  /// بعد از «پاک کردنِ گفتگو» صدا زده می‌شه (چت باز، پیام‌های روی صفحه رو خالی می‌کنه).
+  final VoidCallback? onConversationCleared;
+
+  const SafetyToolkitSheet({
+    super.key,
+    required this.matchPublicId,
+    required this.matchName,
+    this.onConversationCleared,
+  });
+
+  Future<void> _handleClearChat(BuildContext context) async {
+    final confirmed = await _confirm(
+      context,
+      title: 'پاک کردنِ گفتگو؟',
+      body: 'همه‌ی پیام‌های این گفتگو برای «هر دو نفر» پاک می‌شه و دیگه دیده نمی‌شه. این کار برگشت‌پذیر نیست.',
+      confirmLabel: 'پاک کن',
+    );
+    if (confirmed != true) return;
+    if (!context.mounted) return;
+    try {
+      await ApiClient.clearConversation(matchPublicId);
+      if (!context.mounted) return;
+      Navigator.of(context).pop();
+      onConversationCleared?.call();
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('گفتگو برای هر دو نفر پاک شد.')));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('پاک کردنِ گفتگو با مشکل مواجه شد.')));
+    }
+  }
 
   Future<void> _handleFeedback(BuildContext context) async {
     final text = await showDialog<String>(
@@ -206,6 +242,13 @@ class SafetyToolkitSheet extends StatelessWidget {
                       title: 'گزارشِ $matchName',
                       subtitle: 'نگران نباش — طرف خبردار نمی‌شه.',
                       onTap: () => _handleReport(context),
+                    ),
+                    const _RowDivider(),
+                    _ToolkitRow(
+                      icon: Icons.delete_sweep_outlined,
+                      title: 'پاک کردنِ گفتگو برای هر دو نفر',
+                      subtitle: 'همه‌ی پیام‌ها برای شما و $matchName پاک می‌شه.',
+                      onTap: () => _handleClearChat(context),
                     ),
                     const _RowDivider(),
                     _ToolkitRow(

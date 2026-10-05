@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../swipe/swipe_style.dart';
@@ -6,6 +7,14 @@ import 'likes_screen.dart';
 import 'matches_screen.dart';
 import 'profile_home_screen.dart';
 import 'swipe_screen.dart';
+import '../subscription/subscription_state.dart';
+import '../subscription/premium_paywall.dart';
+import '../promo/promo_overlay.dart';
+import '../promo/promo_service.dart';
+import '../bootstrap/bootstrap_service.dart';
+import '../realtime/realtime_service.dart';
+import '../swipe/swipe_outbox.dart';
+import '../chat/conversations_store.dart';
 
 /// صفحه‌ی اصلی اپ — پوسته‌ی سبک تیندر با نوار پایین:
 /// سواپ | اکسپلور | لایک‌ها | چت | پروفایل
@@ -24,10 +33,11 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   static const int _swipeTab = 0;
   static const int _likesTab = 2;
   static const int _chatTab = 3;
+  static const List<String> _screenKeys = ['swipe', 'explore', 'likes', 'chat', 'profile'];
 
   int _index = _swipeTab;
   final Set<int> _visited = {_swipeTab};
@@ -39,25 +49,102 @@ class _HomeScreenState extends State<HomeScreen> {
   final ValueNotifier<int> _swipeEnters = ValueNotifier<int>(0);
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // یه اتصالِ زنده برای کلِ اپ + یه «درخواستِ اولیه» (به‌جای ۵ تا ۶ درخواستِ جدا).
+    RealtimeService.instance.start();
+    BootstrapService.instance.markColdStart();
+    BootstrapService.instance.refresh(force: true);
+    // لیستِ چت‌ها: یه بار موقعِ باز شدنِ اپ (تا اون لحظه از فایلِ ذخیره‌شده)، بعدش فقط با
+    // رویدادهای سرور عوض می‌شه.
+    ConversationsStore.instance.start();
+    SubscriptionState.instance.addListener(_onSubscriptionChanged);
+    AppCounters.instance.addListener(_onCountersChanged);
+    _rtSub = RealtimeService.instance.events.listen(_onRealtimeEvent);
+  }
+
+  StreamSubscription? _rtSub;
+
+  // «کثیف» یعنی از آخرین باری که این تب لود شد چیزی عوض شده؛ تب فقط وقتی دوباره
+  // لود می‌شه که کثیف باشه (یا WebSocket وصل نباشه)، نه با هر ورود.
+  bool _chatDirty = true;
+  bool _likesDirty = true;
+
+  void _onCountersChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onRealtimeEvent(RealtimeEvent e) {
+    if (!mounted) return;
+    // چت‌ها: ConversationsStore خودش با رویدادها (پیام، متچ، آنمتچ...) به‌روز می‌شه.
+    // لایک‌ها: LikesStore (برای اشتراکی‌ها) و BootstrapService رویدادها رو مدیریت می‌کنن؛
+    // صفحه‌ی لایک‌ها هم به همون‌ها گوش می‌ده. این‌جا کارِ اضافه‌ای لازم نیست.
+  }
+
+  bool _lastPremium = SubscriptionState.instance.isPremium;
+
+  void _onSubscriptionChanged() {
+    // فقط وقتی «اشتراکی بودن» عوض شد (نه با هر لایک که شمارنده‌ی سهمیه تغییر می‌کنه).
+    final now = SubscriptionState.instance.isPremium;
+    if (now == _lastPremium) return;
+    _lastPremium = now;
+    _likesDirty = true; // با عوض شدنِ اشتراک، لیستِ لایک‌ها (قفل/باز) باید دوباره بیاد
+    BootstrapService.instance.refresh(force: true);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // از صفحه‌ی پرداخت/تنظیمات برگشتی: وضعیتِ اشتراک رو تازه کن.
+    if (state == AppLifecycleState.resumed) {
+      // برگشت از پس‌زمینه: یه درخواستِ اولیه (حداقل ۲۰ ثانیه فاصله). اتصالِ زنده خودش
+      // دوباره وصل می‌شه و اگه تو این مدت قطع بوده، لیست‌ها رو کثیف حساب می‌کنیم.
+      if (!RealtimeService.instance.connected.value) {
+        _chatDirty = true;
+        _likesDirty = true;
+      }
+      BootstrapService.instance.refresh();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    SubscriptionState.instance.removeListener(_onSubscriptionChanged);
+    AppCounters.instance.removeListener(_onCountersChanged);
+    _rtSub?.cancel();
     _swipeEnters.dispose();
     super.dispose();
   }
 
   // هنوز API‌ای برای «کی لایکم کرده» / «اکسپلور» نداریم؛ وقتی اضافه شد
   // این دو مقدار رو وصل کن تا نشونه‌ی قرمز نوار پایین (مثل تیندر) نشون داده بشه.
-  final int _likesCount = 0;
+  int get _likesCount => AppCounters.instance.likesCount;
   final bool _exploreDot = false;
 
   void _select(int i) {
     if (i == _index) return;
     HapticFeedback.selectionClick();
+    // از سواپ/اکسپلور رفتیم بیرون: ردهای جمع‌شده رو بفرست.
+    if (_index <= 1 && i > 1) SwipeOutbox.instance.flush();
     setState(() {
       _index = i;
       _visited.add(i);
       if (i == _swipeTab) _swipeEnters.value++;
-      if (i == _chatTab) _chatRefresh++; // متچ‌های جدید دوباره لود بشن
-      if (i == _likesTab) _likesRefresh++; // لایک‌ها دوباره از بک‌اند لود بشن
+      // اتصالِ زنده نداریم: به‌روزرسانیِ رویدادها ممکنه از دست رفته باشه، پس یه بار از سرور.
+      if (i == _chatTab && !RealtimeService.instance.connected.value) {
+        ConversationsStore.instance.refresh();
+      }
+      if (i == _likesTab) {
+        if (_likesDirty) {
+          _likesRefresh++; // مثلاً اشتراک عوض شده: قفل/بازِ لیست
+          _likesDirty = false;
+        }
+        // رایگان: شمارنده‌ی لایک‌ها از یه ساعت قدیمی‌تره؟ بگیر (bootstrap فقط همین‌وقت می‌فرستدش).
+        if (!SubscriptionState.instance.isPremium && AppCounters.instance.stale) {
+          BootstrapService.instance.refresh();
+        }
+      }
     });
   }
 
@@ -78,7 +165,10 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Scaffold(
           backgroundColor: Colors.black,
           resizeToAvoidBottomInset: false,
-          body: IndexedStack(
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+          IndexedStack(
             index: _index,
             children: [
               SwipeScreen(
@@ -92,7 +182,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   data: ThemeData.dark().copyWith(
                     scaffoldBackgroundColor: Colors.black,
                   ),
-                  child: LikesScreen(key: ValueKey<int>(_likesRefresh)),
+                  child: ListenableBuilder(
+                    listenable: SubscriptionState.instance,
+                    builder: (context, _) => LikesScreen(
+                      key: ValueKey<String>(
+                          '$_likesRefresh-${SubscriptionState.instance.isPremium}'),
+                      isPremium: SubscriptionState.instance.isPremium,
+                      onUpgrade: () => openUpgrade(context),
+                    ),
+                  ),
                 ),
               ),
               _lazy(
@@ -112,6 +210,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               _lazy(4, () => const ProfileHomeScreen()),
+            ],
+          ),
+              // پاپ‌آپ‌ها و باکس‌های شناورِ تبلیغاتی (از پنلِ ادمین)
+              PromoHost(
+                screen: _screenKeys[_index],
+                onNavigate: (screen) {
+                  final i = _screenKeys.indexOf(screen);
+                  if (i >= 0) _select(i);
+                },
+              ),
             ],
           ),
           bottomNavigationBar: _BottomNav(

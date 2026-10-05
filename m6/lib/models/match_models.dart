@@ -82,6 +82,19 @@ class ConversationSummary {
   /// true یعنی طرف پیام داده و منتظر جواب ماست.
   bool get yourTurn => hasMessages && !lastMessageFromMe;
 
+  Map<String, dynamic> toJson() => {
+        'public_id': publicId,
+        'name': name,
+        'photo_url': photoUrl,
+        'verified': verified,
+        'matched_at': matchedAt?.toIso8601String(),
+        'last_message_body': lastMessageBody,
+        'last_message_at': lastMessageAt?.toIso8601String(),
+        'last_message_from_me': lastMessageFromMe,
+        'recently_active': recentlyActive,
+        'state': state,
+      };
+
   factory ConversationSummary.fromJson(Map<String, dynamic> json) => ConversationSummary(
         publicId: json['public_id'],
         name: json['name'],
