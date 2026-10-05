@@ -321,7 +321,7 @@ class DiscoveryCandidate {
   final int age;
   final String bio;
   final List<String> interests;
-  final List<PromptAnswer> prompts;
+  List<PromptAnswer> prompts;
   final List<Photo> photos;
   final double? distanceKm;
 
