@@ -25,7 +25,15 @@ String backendBaseUrl = 'http://10.0.2.2:8080';
 // این با NetworkException فرق داره — این یکی یعنی "سرور جواب داد ولی نه".
 class ApiException implements Exception {
   final String code; // e.g. "invalid_credentials", "invalid_phone"
-  ApiException(this.code);
+
+  /// فقط برای code == 'account_banned' (پاسخ ۴۰۳ لاگین): دلیل، پایانِ بنِ موقت (به وقتِ
+  /// محلیِ گوشی؛ null = دائمی) و دائمی بودن.
+  final String? banReason;
+  final DateTime? banUntil;
+  final bool banPermanent;
+
+  ApiException(this.code,
+      {this.banReason, this.banUntil, this.banPermanent = true});
 }
 
 // NetworkException یعنی اصلاً نتونستیم به سرور وصل بشیم (سرور خاموشه، آدرس
@@ -137,6 +145,19 @@ class ApiClient {
 
     final data = jsonDecode(response.body);
     if (response.statusCode != 200) {
+      if (data is Map && data['error'] == 'account_banned') {
+        final untilRaw = data['until'];
+        DateTime? until;
+        if (untilRaw is String) until = DateTime.tryParse(untilRaw)?.toLocal();
+        final reason = data['reason'];
+        throw ApiException(
+          'account_banned',
+          banReason: reason is String && reason.trim().isNotEmpty ? reason.trim() : null,
+          banUntil: until,
+          // اگه تاریخ نیومد (یا خراب بود) دائمی حساب می‌شه، مگه سرور صریحاً permanent=false گفته باشه.
+          banPermanent: until == null,
+        );
+      }
       throw ApiException(data['error'] ?? 'unknown_error');
     }
 
@@ -417,6 +438,32 @@ class ApiClient {
     }
   }
 
+  /// وضعیتِ موقعیتِ خودِ کاربر (Passport): mode = 'real' | 'custom'.
+  static Future<PassportState> getPassportState() async {
+    final response = await _get('/api/profile/location/passport', authenticated: true);
+    final data = jsonDecode(response.body);
+    if (response.statusCode != 200) {
+      throw ApiException(data['error'] ?? 'unknown_error');
+    }
+    return PassportState.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  /// برگشت به GPSِ واقعی.
+  static Future<PassportState> useRealLocation() => _postPassport({'mode': 'real'});
+
+  /// موقعیتِ دلخواه روی نقشه — فقط اشتراکی (وگرنه ApiException('premium_required')).
+  static Future<PassportState> useCustomLocation(double latitude, double longitude) =>
+      _postPassport({'mode': 'custom', 'latitude': latitude, 'longitude': longitude});
+
+  static Future<PassportState> _postPassport(Map<String, dynamic> body) async {
+    final response = await _post('/api/profile/location/passport', body, authenticated: true);
+    final data = jsonDecode(response.body);
+    if (response.statusCode != 200) {
+      throw ApiException(data['error'] ?? 'unknown_error');
+    }
+    return PassportState.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
   static Future<List<DiscoveryCandidate>> fetchDiscovery({
     int? minAge,
     int? maxAge,
@@ -425,10 +472,12 @@ class ApiClient {
     List<String> exclude = const [],
     bool includeSwiped = false,
     bool lean = false, // کارتِ سبک (سواپ و اکسپلور)؛ جزئیات با زدنِ فلشِ کارت
+    bool nearby = false, // تب «نزدیک»: سقفِ ثابتِ سرور (برای همه آزاده)؛ فیلترِ فاصله مخصوصِ اشتراکیه
     String? exploreId, // فقط وقتی یه دسته‌ی اکسپلور واقعاً باز شده؛ فیلترش سمتِ سرور اعمال می‌شه
   }) async {
     final params = <String, String>{'limit': '$limit'};
     if (lean) params['lean'] = '1';
+    if (nearby) params['nearby'] = '1';
     if (exploreId != null && exploreId.isNotEmpty) params['explore_id'] = exploreId;
     if (minAge != null) params['min_age'] = '$minAge';
     if (maxAge != null) params['max_age'] = '$maxAge';
@@ -457,14 +506,29 @@ class ApiClient {
   }
 
   static Future<DiscoveryCandidate> fetchDiscoveryProfile(String publicId) async {
-    final uri = Uri.parse('$backendBaseUrl/api/discovery/profile')
-        .replace(queryParameters: {'id': publicId});
+    // بدونِ نسخه (v) سرور همیشه کارتِ کامل می‌فرسته.
+    return DiscoveryCandidate.fromJson(await fetchDiscoveryProfileRaw(publicId));
+  }
+
+  /// [version] = نسخه‌ی کارت تو کشِ اپ، [hasDetails] = جزئیاتِ همون نسخه رو هم داریم.
+  ///  - نسخه کهنه: کارتِ کامل (full=true).
+  ///  - نسخه یکی + hasDetails: هیچ‌چیزِ کارت نمی‌آد (details_included=false).
+  ///  - نسخه یکی بدونِ جزئیات: فقط جزئیات (full=false).
+  /// برای همین JSON خام برمی‌گرده و DiscoveryCandidate.applyServerProfile تصمیم می‌گیره.
+  static Future<Map<String, dynamic>> fetchDiscoveryProfileRaw(String publicId,
+      {int version = 0, bool hasDetails = false}) async {
+    final uri = Uri.parse('$backendBaseUrl/api/discovery/profile').replace(
+        queryParameters: {
+          'id': publicId,
+          if (version > 0) 'v': '$version',
+          if (version > 0 && hasDetails) 'd': '1',
+        });
     final response = await _getUri(uri, authenticated: true);
     if (response.statusCode != 200) {
       final data = jsonDecode(response.body);
       throw ApiException(data['error'] ?? 'unknown_error');
     }
-    return DiscoveryCandidate.fromJson(jsonDecode(response.body));
+    return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
   }
 
   static Future<SwipeResult> swipe(String publicId, String direction,
@@ -770,4 +834,22 @@ class ApiClient {
         .replaceFirst('http://', 'ws://');
     return '$wsBase/ws';
   }
+}
+
+/// وضعیتِ موقعیتِ کاربر برای صفحه‌ی Passport.
+class PassportState {
+  final String mode; // 'real' | 'custom'
+  final double? latitude; // موقعیتِ مؤثر (اون چیزی که بقیه فاصله‌شون رو ازش می‌بینن)
+  final double? longitude;
+  final bool isPremium;
+  const PassportState({required this.mode, this.latitude, this.longitude, this.isPremium = false});
+
+  bool get isCustom => mode == 'custom';
+
+  factory PassportState.fromJson(Map<String, dynamic> j) => PassportState(
+        mode: j['mode'] as String? ?? 'real',
+        latitude: (j['latitude'] as num?)?.toDouble(),
+        longitude: (j['longitude'] as num?)?.toDouble(),
+        isPremium: j['is_premium'] == true,
+      );
 }

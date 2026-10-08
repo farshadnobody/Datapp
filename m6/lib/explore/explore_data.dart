@@ -14,7 +14,7 @@
 
 import 'package:flutter/material.dart';
 
-enum ExploreKind { intent, interest, lifestyle, wantChildren, verified }
+enum ExploreKind { intent, interest, lifestyle, wantChildren }
 
 class ExploreCategory {
   final String id;
@@ -31,7 +31,6 @@ class ExploreCategory {
   /// برای kind == intent: یه یا چندتا شناسه‌ی kLookingForOptions.
   /// برای kind == lifestyle: مقادیرِ قابلِ‌قبولِ همون فیلدِ lifestyle.
   /// برای kind == wantChildren: مقادیرِ قابلِ‌قبولِ kWantChildrenOptions.
-  /// برای kind == verified: استفاده نمی‌شه.
   final Set<String> values;
 
   /// فقط برای kind == lifestyle: کلیدِ نقشه‌ی c.lifestyle (مثلاً 'pets').
@@ -130,16 +129,6 @@ final List<ExploreCategory> kExploreCategories = [
     count: 63,
     kind: ExploreKind.intent,
     values: {'new_friends'},
-  ),
-  const ExploreCategory(
-    id: 'get_photo_verified',
-    title: 'تأیید هویت شده',
-    emoji: '✅',
-    imageAsset: 'assets/explore_icons/get_photo_verified.png',
-    icon: Icons.verified_outlined,
-    gradient: [Color(0xFF3D9CF0), Color(0xFF1E5FA8)],
-    count: 37,
-    kind: ExploreKind.verified,
   ),
   const ExploreCategory(
     id: 'wants_kids',

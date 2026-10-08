@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import '../api_client.dart';
+import '../widgets/distance_filter_control.dart';
+import '../subscription/subscription_state.dart';
+import '../cache/card_resolver.dart';
 import '../models/profile_models.dart';
 import '../models/match_models.dart';
 import '../widgets/profile_detail_sheet.dart';
-import 'location_picker_screen.dart';
+import 'passport_screen.dart';
 import 'matches_screen.dart';
 
 class DiscoveryScreen extends StatefulWidget {
@@ -118,7 +121,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
       final candidates = await ApiClient.fetchDiscovery(
         minAge: _minAge,
         maxAge: _maxAge,
-        maxDistanceKm: _maxDistanceKm,
+        maxDistanceKm: SubscriptionState.instance.isPremium ? _maxDistanceKm : null,
         exclude: _excluded.toList(),
         includeSwiped: _browsingAgain,
       );
@@ -364,15 +367,9 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
                   }),
                 ),
                 const SizedBox(height: 8),
-                Text(tempDistance == null
-                    ? 'حداکثر فاصله: بدون محدودیت'
-                    : 'حداکثر فاصله: ${tempDistance!.round()} کیلومتر'),
-                Slider(
-                  min: 1,
-                  max: 200,
-                  divisions: 199,
-                  value: tempDistance ?? 200,
-                  onChanged: (v) => setSheetState(() => tempDistance = v >= 200 ? null : v),
+                DistanceFilterControl(
+                  value: tempDistance,
+                  onChanged: (v) => setSheetState(() => tempDistance = v),
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
@@ -481,7 +478,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
 
   Future<void> _searchAndShow(String publicId) async {
     try {
-      final candidate = await ApiClient.fetchDiscoveryProfile(publicId);
+      final candidate = await resolveCard(publicId);
       if (mounted) _openDetail(candidate);
     } on NetworkException {
       if (mounted) {
@@ -509,11 +506,11 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
           ),
           IconButton(
             icon: const Icon(Icons.map_outlined),
-            tooltip: 'انتخاب موقعیت رو نقشه',
+            tooltip: 'موقعیت مکانی (Passport)',
             onPressed: () async {
               final changed = await Navigator.push<bool>(
                 context,
-                MaterialPageRoute(builder: (_) => const LocationPickerScreen()),
+                MaterialPageRoute(builder: (_) => const PassportScreen()),
               );
               if (changed == true) {
                 setState(() => _stack = []);
@@ -739,7 +736,7 @@ class _DiscoveryScreenState extends State<DiscoveryScreen>
                       ],
                     ),
                     if (candidate.distanceKm != null)
-                      Text('${candidate.distanceKm} کیلومتر دورتر',
+                      Text('${candidate.distanceKm!.round()} کیلومتر دورتر',
                           style: const TextStyle(color: Colors.white70, fontSize: 13)),
                   ],
                 ),

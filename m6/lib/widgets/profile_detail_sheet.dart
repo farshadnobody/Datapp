@@ -51,7 +51,7 @@ class ProfileDetailSheet extends StatelessWidget {
         if (candidate.distanceKm != null)
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Text('${candidate.distanceKm} کیلومتر دورتر',
+            child: Text('${candidate.distanceKm!.round()} کیلومتر دورتر',
                 style: TextStyle(color: Colors.grey.shade600)),
           ),
         if (candidate.bio.isNotEmpty) ...[

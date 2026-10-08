@@ -205,7 +205,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                   child: MatchesScreen(
                     key: ValueKey<int>(_chatRefresh),
-                    onOpenLikes: () => _select(_likesTab),
                   ),
                 ),
               ),

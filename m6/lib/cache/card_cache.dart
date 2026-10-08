@@ -85,6 +85,16 @@ class CardCache {
     return DiscoveryCandidate.fromJson(e.card);
   }
 
+  /// کارتِ کش‌شده بدونِ چکِ تازگی (برای مقایسه‌ی نسخه با سرور موقعِ باز کردنِ پروفایل).
+  /// null اگه تو کش نیست. detailsLoaded اونجا true ـه که جزئیاتِ همون نسخه هم تو کشه.
+  DiscoveryCandidate? getAny(String id) {
+    final e = _map[id];
+    if (e == null) return null;
+    e.lastAccessed = _clock().millisecondsSinceEpoch;
+    _scheduleFlush();
+    return DiscoveryCandidate.fromJson(e.card);
+  }
+
   /// از بین {public_id: serverVersion}، اونایی که تو کش نیستن یا کهنه‌ان.
   List<String> missingOrStale(Map<String, int> idsWithVersions) {
     final out = <String>[];
@@ -106,7 +116,9 @@ class CardCache {
       if (old != null && old.version > c.version) continue;
       if (old != null && old.version == c.version) {
         old.lastAccessed = now;
-        continue;
+        // همون نسخه: فقط وقتی جایگزین می‌شه که الان جزئیات رو داریم و کش نداره.
+        final oldHasDetails = old.card['lean'] != true;
+        if (oldHasDetails || !c.detailsLoaded) continue;
       }
       final json = c.toCacheJson();
       final bytes = utf8.encode(jsonEncode(json)).length;
@@ -115,6 +127,15 @@ class CardCache {
       _bytes += bytes;
     }
     await evictIfNeeded();
+    await _flushNow();
+  }
+
+  /// یه کارت رو از کش پاک می‌کنه (مثلاً وقتی سرور گفته این کاربر دیگه وجود نداره / بن شده).
+  Future<void> remove(String id) async {
+    await ensureLoaded();
+    final old = _map.remove(id);
+    if (old == null) return;
+    _bytes -= old.bytes;
     await _flushNow();
   }
 

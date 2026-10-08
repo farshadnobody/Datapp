@@ -76,18 +76,11 @@ class DiscoveryQueue {
       final c = CardCache.instance.getIfFresh(it.id, it.version);
       if (c == null) continue;
       c.previousDirection = it.previousDirection;
-      out.add(it.superLikedMe ? _withSuperLike(c) : c);
+      c.distanceKm = it.distanceKm;
+      out.add(it.superLikedMe ? c.withSuperLiked() : c);
     }
     return out;
   }
-
-  static DiscoveryCandidate _withSuperLike(DiscoveryCandidate c) => DiscoveryCandidate(
-        publicId: c.publicId, name: c.name, age: c.age, bio: c.bio,
-        interests: c.interests, prompts: c.prompts, photos: c.photos,
-        distanceKm: c.distanceKm, version: c.version,
-        previousDirection: c.previousDirection, superLikedMe: true,
-        detailsLoaded: c.detailsLoaded,
-      );
 
   Map<String, dynamic> toJson() => {
         'key': key,
@@ -115,22 +108,27 @@ class QueueItem {
   final int version;
   final String? previousDirection; // وابسته به بیننده → تو صف، نه تو کش
   final bool superLikedMe;
-  const QueueItem(this.id, this.version, {this.previousDirection, this.superLikedMe = false});
+  final double? distanceKm; // وابسته به بیننده → تو صف (snapshotِ زمانِ batch)، نه تو کش
+  const QueueItem(this.id, this.version,
+      {this.previousDirection, this.superLikedMe = false, this.distanceKm});
 
   factory QueueItem.fromCandidate(DiscoveryCandidate c) => QueueItem(
         c.publicId, c.version,
-        previousDirection: c.previousDirection, superLikedMe: c.superLikedMe);
+        previousDirection: c.previousDirection, superLikedMe: c.superLikedMe,
+        distanceKm: c.distanceKm);
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'v': version,
         if (previousDirection != null) 'prev': previousDirection,
         if (superLikedMe) 'sl': true,
+        if (distanceKm != null) 'km': distanceKm,
       };
 
   factory QueueItem.fromJson(Map<String, dynamic> j) => QueueItem(
         j['id'] as String, (j['v'] as num).toInt(),
-        previousDirection: j['prev'] as String?, superLikedMe: j['sl'] == true);
+        previousDirection: j['prev'] as String?, superLikedMe: j['sl'] == true,
+        distanceKm: (j['km'] as num?)?.toDouble());
 }
 
 /// ذخیره/بازیابیِ صف‌ها (هر کلید یه فایل زیرِ queues/). نوشتن: tmp → rename.
@@ -177,6 +175,25 @@ class DiscoveryQueueStore {
     try {
       final f = File('${(await _dir()).path}/${_name(key)}');
       if (await f.exists()) await f.delete();
+    } catch (_) {}
+  }
+
+  /// یه کارت رو از «همه‌ی» صف‌های ذخیره‌شده (Swipe و Explore) و از لیستِ دیده‌شده‌ها پاک می‌کنه.
+  Future<void> removeEverywhere(String id) async {
+    try {
+      final d = Directory('${(await _dirProvider()).path}/queues');
+      if (!await d.exists()) return;
+      await for (final e in d.list()) {
+        if (e is! File || !e.path.endsWith('.json')) continue;
+        try {
+          final q = DiscoveryQueue.fromJson(
+              jsonDecode(await e.readAsString()) as Map<String, dynamic>);
+          final before = q.items.length;
+          q.items.removeWhere((i) => i.id == id);
+          q.seen.remove(id);
+          if (q.items.length != before) await save(q);
+        } catch (_) {}
+      }
     } catch (_) {}
   }
 

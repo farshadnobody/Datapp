@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../api_client.dart';
+import '../cache/card_resolver.dart';
 import '../models/match_models.dart';
 import '../models/profile_models.dart';
 import '../style/app_colors.dart';
@@ -45,7 +46,7 @@ class _MatchProfileScreenState extends State<MatchProfileScreen> {
     });
     try {
       final results = await Future.wait([
-        ApiClient.fetchDiscoveryProfile(widget.match.publicId),
+        resolveCard(widget.match.publicId),
         ApiClient.fetchProfileOptions(),
       ]);
       final candidate = results[0] as DiscoveryCandidate;

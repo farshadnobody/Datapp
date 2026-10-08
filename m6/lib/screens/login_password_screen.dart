@@ -61,7 +61,7 @@ class _LoginPasswordScreenState extends State<LoginPasswordScreen> {
         _errorText = e.code == 'too_many_requests'
             ? 'تعداد تلاش‌های ناموفق زیاد بود. ۱۵ دقیقه‌ی دیگه دوباره امتحان کن.'
             : e.code == 'account_banned'
-                ? 'این حساب توسط پشتیبانی مسدود شده.'
+                ? _banMessage(e)
                 : 'شماره موبایل یا رمز عبور اشتباهه.';
       });
     } catch (e) {
@@ -69,6 +69,23 @@ class _LoginPasswordScreenState extends State<LoginPasswordScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  // تاریخ میلادی و به وقتِ محلیِ گوشی (کتابخونه‌ی تاریخِ شمسی تو پروژه نیست).
+  static String _fmt(DateTime d) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}';
+  }
+
+  static String _banMessage(ApiException e) {
+    final reason = e.banReason;
+    final until = e.banUntil;
+    if (until != null && !e.banPermanent) {
+      final why = reason == null ? '' : ' به دلیل «$reason»';
+      return 'حساب تو$why تا تاریخ ${_fmt(until)} مسدود شده. بعد از این تاریخ می‌تونی دوباره وارد بشی.';
+    }
+    final why = reason == null ? '' : ' به دلیل «$reason»';
+    return 'حساب تو$why برای همیشه مسدود شده.';
   }
 
   @override

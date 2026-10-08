@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../network_config.dart';
 
-enum PaywallReason { superLike, likes, rewind, likeLimit, chatHistory }
+enum PaywallReason { superLike, likes, rewind, likeLimit, chatHistory, passport, distanceFilter }
 
 /// شیتِ «این قابلیت مخصوصِ اشتراکِ ویژه‌ست».
 Future<void> showPremiumPaywall(BuildContext context, PaywallReason reason) {
@@ -30,6 +30,18 @@ Future<void> showPremiumPaywall(BuildContext context, PaywallReason reason) {
         const Color(0xFFFFC629),
         'تاریخچه‌ی کاملِ چت مخصوصِ اشتراکِ ویژه‌ست',
         'کاربرِ رایگان فقط پیام‌های اخیر رو می‌بینه. با اشتراکِ ویژه همه‌ی پیام‌های قدیمی هم باز می‌شن.',
+      ),
+    PaywallReason.passport => (
+        Icons.public_rounded,
+        const Color(0xFFFFC629),
+        'موقعیتِ دلخواه مخصوصِ اشتراکِ ویژه‌ست',
+        'با اشتراکِ ویژه هر جای دنیا رو روی نقشه انتخاب می‌کنی و از اون‌جا کاربرها رو می‌بینی.',
+      ),
+    PaywallReason.distanceFilter => (
+        Icons.social_distance_rounded,
+        const Color(0xFFFFC629),
+        'فیلترِ فاصله مخصوصِ اشتراکِ ویژه‌ست',
+        'با اشتراکِ ویژه می‌تونی حداکثر فاصله‌ی کاربرهایی که بهت نشون داده می‌شن رو خودت تعیین کنی.',
       ),
     PaywallReason.likeLimit => (
         Icons.favorite,

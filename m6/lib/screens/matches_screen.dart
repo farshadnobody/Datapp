@@ -1,4 +1,3 @@
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../api_client.dart';
@@ -8,17 +7,13 @@ import 'chat_screen.dart';
 import '../widgets/app_network_image.dart';
 import '../chat/conversations_store.dart';
 import '../bootstrap/bootstrap_service.dart';
-import '../likes/likes_store.dart';
-import '../subscription/subscription_state.dart';
 
-/// لیست چت — سرِ صفحه، نوارِ جستجو، ردیفِ «متچ‌های جدید» (+ کارتِ تیزرِ
-/// لایک‌ها)، و پایینش لیستِ «پیام‌ها». دیتا از `GET /api/conversations` و
+/// لیست چت — سرِ صفحه، نوارِ جستجو، ردیفِ «متچ‌های جدید» ، و پایینش لیستِ «پیام‌ها». دیتا از `GET /api/conversations` و
 /// `GET /api/likes/summary` میاد — این دو اندپوینت هنوز تو بک‌اند نیستن
 /// (به ApiClient اضافه‌شون کردم، همین‌جا منتظرِ 404/خطا می‌مونه تا وصل
 /// بشن).
 class MatchesScreen extends StatefulWidget {
-  final VoidCallback? onOpenLikes;
-  const MatchesScreen({super.key, this.onOpenLikes});
+  const MatchesScreen({super.key});
 
   @override
   State<MatchesScreen> createState() => _MatchesScreenState();
@@ -26,7 +21,6 @@ class MatchesScreen extends StatefulWidget {
 
 class _MatchesScreenState extends State<MatchesScreen> {
   List<ConversationSummary> _conversations = [];
-  LikesSummary? _likes;
   bool _loading = true;
   String? _error;
   final _searchController = TextEditingController();
@@ -38,8 +32,6 @@ class _MatchesScreenState extends State<MatchesScreen> {
     // لیستِ چت‌ها از ConversationsStore میاد (فایلِ ذخیره‌شده + رویدادهای سرور)؛ این صفحه
     // هر بار که باز می‌شه چیزی از سرور نمی‌گیره.
     ConversationsStore.instance.addListener(_syncFromStore);
-    AppCounters.instance.addListener(_syncFromStore);
-    LikesStore.instance.addListener(_syncFromStore);
     _syncFromStore();
     _searchController.addListener(() {
       setState(() => _query = _searchController.text.trim());
@@ -49,8 +41,6 @@ class _MatchesScreenState extends State<MatchesScreen> {
   @override
   void dispose() {
     ConversationsStore.instance.removeListener(_syncFromStore);
-    AppCounters.instance.removeListener(_syncFromStore);
-    LikesStore.instance.removeListener(_syncFromStore);
     _searchController.dispose();
     super.dispose();
   }
@@ -58,25 +48,10 @@ class _MatchesScreenState extends State<MatchesScreen> {
   void _syncFromStore() {
     if (!mounted) return;
     final store = ConversationsStore.instance;
-    // تیزرِ لایک‌ها: از شمارنده‌ی روی گوشی (رایگان) یا لایک‌های ذخیره‌شده (اشتراکی)؛
-    // درخواستِ جدا به /api/likes/summary نمی‌ره.
-    final premium = SubscriptionState.instance.isPremium;
-    final previews = premium
-        ? LikesStore.instance.entries
-            .map((e) => e.candidate.photos.isNotEmpty ? e.candidate.photos.first.url : '')
-            .where((u) => u.isNotEmpty)
-            .take(3)
-            .toList()
-        : <String>[];
     setState(() {
       _conversations = store.items;
       _loading = store.loading && store.items.isEmpty;
       _error = store.error;
-      _likes = LikesSummary(
-        count: AppCounters.instance.likesCount,
-        superLikeCount: AppCounters.instance.superLikeCount,
-        previewPhotoUrls: previews,
-      );
     });
   }
 
@@ -178,7 +153,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
               ),
             ),
           ),
-          if (newMatches.isNotEmpty || (_likes?.count ?? 0) > 0) ...[
+          if (newMatches.isNotEmpty) ...[
             const Padding(
               padding: EdgeInsets.fromLTRB(20, 22, 20, 10),
               child: Text('متچ‌های جدید',
@@ -190,11 +165,6 @@ class _MatchesScreenState extends State<MatchesScreen> {
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 children: [
-                  if ((_likes?.count ?? 0) > 0)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 10),
-                      child: _LikesTeaserCard(likes: _likes!, onTap: widget.onOpenLikes),
-                    ),
                   for (final c in newMatches)
                     Padding(
                       padding: const EdgeInsets.only(left: 10),
@@ -251,61 +221,6 @@ class _NewMatchCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LikesTeaserCard extends StatelessWidget {
-  final LikesSummary likes;
-  final VoidCallback? onTap;
-  const _LikesTeaserCard({required this.likes, this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final previewUrl = likes.previewPhotoUrls.isEmpty ? null : likes.previewPhotoUrls.first;
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onTap?.call();
-      },
-      child: SizedBox(
-        width: 96,
-        child: Column(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: SizedBox(
-                width: 96,
-                height: 116,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (previewUrl != null)
-                      ImageFiltered(
-                        imageFilter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-                        child: AppNetworkImage(previewUrl, thumb: true, placeholderColor: AppDark.card),
-                      )
-                    else
-                      Container(
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [Color(0xFFE9B44C), Color(0xFFB2478A)],
-                          ),
-                        ),
-                      ),
-                    Container(color: const Color(0x55000000)),
-                    const Center(child: Icon(Icons.lock, color: Colors.white, size: 22)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text('${likes.count} لایک', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
           ],
         ),
       ),

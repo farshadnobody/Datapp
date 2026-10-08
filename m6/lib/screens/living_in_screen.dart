@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart' as ll;
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import '../style/app_colors.dart';
@@ -55,13 +56,12 @@ class _LivingInScreenState extends State<LivingInScreen> {
 
   Future<void> _pickFromMap() async {
     HapticFeedback.lightImpact();
-    final saved = await Navigator.of(context).push<bool>(
+    final picked = await Navigator.of(context).push<ll.LatLng>(
       MaterialPageRoute(builder: (_) => const LocationPickerScreen()),
     );
-    // LocationPickerScreen خودش مختصات رو مستقیم به سرور می‌فرسته (ذخیره
-    // می‌شه)؛ اینجا فقط یه برچسب نمایشی برمی‌گردونیم چون اسم واقعی شهر رو
-    // نداریم (بدون geocoding).
-    if (saved == true && mounted) Navigator.of(context).pop('موقعیت انتخاب‌شده روی نقشه');
+    // «زندگی در» فقط یه برچسبِ نمایشیه (بدون geocoding اسمِ شهر رو نداریم) و دیگه
+    // موقعیتِ کشف رو عوض نمی‌کنه؛ اون از صفحه‌ی «موقعیت مکانی» (Passport) تنظیم می‌شه.
+    if (picked != null && mounted) Navigator.of(context).pop('موقعیت انتخاب‌شده روی نقشه');
   }
 
   @override

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/profile_models.dart';
 import '../onboarding/onboarding_data.dart';
+import '../onboarding/language_options.dart';
 import '../style/app_colors.dart';
 
 IconData _lifestyleIcon(String category, String value) {
@@ -55,6 +56,17 @@ class DiscoveryProfileDetailSheet extends StatelessWidget {
       final text = km < 1 ? 'کمتر از ۱ کیلومتر' : '${km.round()} کیلومتر دورتر';
       essentialsRows.add((Icons.location_on_outlined, 'فاصله', text));
     }
+    final job = [c.jobTitle, c.jobCompany]
+        .where((e) => e != null && e.trim().isNotEmpty)
+        .map((e) => e!.trim())
+        .join(' · ');
+    if (job.isNotEmpty) essentialsRows.add((Icons.work_outline, 'شغل', job));
+    if (c.cityName != null && c.cityName!.trim().isNotEmpty) {
+      essentialsRows.add((Icons.location_city_outlined, 'زندگی در', c.cityName!.trim()));
+    }
+    if (c.heightCm != null && c.heightCm! > 0) {
+      essentialsRows.add((Icons.height, 'قد', '${c.heightCm} سانتی‌متر'));
+    }
 
     final basicsRows = <(IconData, String, String)>[];
     final loveLanguage = optionLabel(
@@ -70,6 +82,12 @@ class DiscoveryProfileDetailSheet extends StatelessWidget {
     final zodiac = optionLabel(
         kAboutYouCategories.firstWhere((cat) => cat.id == 'zodiac').items, c.aboutYou['zodiac']);
     if (zodiac != null) basicsRows.add((Icons.nightlight_outlined, 'برج', zodiac));
+    final wantChildren = optionLabel(kWantChildrenOptions, c.wantChildren);
+    if (wantChildren != null) basicsRows.add((Icons.child_care_outlined, 'بچه', wantChildren));
+    if (c.languages.isNotEmpty) {
+      final names = [for (final id in c.languages) optionLabel(kLanguageOptions, id) ?? id];
+      basicsRows.add((Icons.translate, 'زبان‌ها', names.join('، ')));
+    }
 
     final lifestyleOrder = ['drinking', 'smoking', 'workout', 'pets', 'social_media'];
     final lifestyleRows = <(IconData, String, String)>[];

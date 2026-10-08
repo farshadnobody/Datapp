@@ -9,7 +9,8 @@ import '../api_client.dart';
 // کاربر ترجیح می‌ده موقعیت تقریبی نشون بده. از OpenStreetMap استفاده می‌کنیم
 // (نه Google Maps) چون نیازی به API key یا صورت‌حساب نداره.
 class LocationPickerScreen extends StatefulWidget {
-  const LocationPickerScreen({super.key});
+  final ll.LatLng? initialCenter;
+  const LocationPickerScreen({super.key, this.initialCenter});
 
   @override
   State<LocationPickerScreen> createState() => _LocationPickerScreenState();
@@ -28,7 +29,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   @override
   void initState() {
     super.initState();
-    _tryCenterOnCurrentLocation();
+    // اگه موقعیتِ فعلی/قبلی رو می‌دونیم از همونجا شروع می‌کنیم، وگرنه GPS رو امتحان می‌کنیم.
+    if (widget.initialCenter == null) _tryCenterOnCurrentLocation();
   }
 
   Future<void> _tryCenterOnCurrentLocation() async {
@@ -45,27 +47,11 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     }
   }
 
-  Future<void> _confirm() async {
+  /// مختصاتِ مرکزِ نقشه رو برمی‌گردونه؛ ذخیره‌ی اون کارِ صدازننده‌ست (Passport فقط برای
+  /// اشتراکی‌ها ذخیره می‌کنه، «زندگی در» اصلاً موقعیتِ کشف رو تغییر نمی‌ده).
+  void _confirm() {
     HapticFeedback.lightImpact();
-    // موقعیت لحظه‌ی تأیید رو مستقیم از خود کنترلر نقشه می‌خونیم — نیازی به
-    // ردیابی زنده‌ی جابه‌جایی نداریم.
-    final center = _mapController.camera.center;
-
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-
-    try {
-      await ApiClient.updateLocation(center.latitude, center.longitude);
-      if (mounted) Navigator.pop(context, true);
-    } on NetworkException {
-      setState(() => _error = 'ارتباط با سرور برقرار نشد.');
-    } catch (e) {
-      setState(() => _error = 'ذخیره‌ی موقعیت با مشکل مواجه شد.');
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+    Navigator.pop(context, _mapController.camera.center);
   }
 
   @override
@@ -88,8 +74,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         children: [
           FlutterMap(
             mapController: _mapController,
-            options: const MapOptions(
-              initialCenter: _defaultCenter,
+            options: MapOptions(
+              initialCenter: widget.initialCenter ?? _defaultCenter,
               initialZoom: 12,
             ),
             children: [

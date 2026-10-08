@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../api_client.dart';
+import '../cache/card_cache.dart';
+import '../cache/card_resolver.dart';
 import '../models/profile_models.dart';
 import '../onboarding/onboarding_data.dart';
+import '../onboarding/language_options.dart';
 import '../widgets/discovery_profile_detail_sheet.dart';
 import '../widgets/profile_safety_actions.dart';
 import 'swipe_style.dart';
@@ -191,17 +194,30 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
 
   bool _loadingDetails = false;
 
-  /// کارتِ سبک: جزئیات (پرامپت‌ها، سبک زندگی، تحصیلات، «دنبال چی هستم»...) فقط وقتی کاربر
-  /// فلش رو می‌زنه از سرور گرفته می‌شه و روی همین کارت می‌شینه.
+  /// جزئیاتِ کارت (پرامپت‌ها، سبک زندگی، تحصیلات، «دنبال چی هستم»، شغل، قد، ...) با زدنِ
+  /// فلش: نسخه‌ی کارت + اینکه جزئیاتش رو داریم یا نه همراهِ id به سرور می‌ره.
+  ///  - نسخه یکی و جزئیات تو کش → سرور چیزی نمی‌فرسته، همون کش نمایش داده می‌شه.
+  ///  - نسخه یکی ولی جزئیات نداریم → فقط جزئیات می‌آد.
+  ///  - نسخه کهنه → کارتِ کامل می‌آد و هم نمایش هم CardCache به‌روز می‌شن.
+  /// تو هر نمایشِ کارت فقط یه بار چک می‌شه (حتی اگه جزئیات از کش اومده باشن).
   Future<void> _ensureDetails() async {
     final c = widget.candidate;
-    if (c.detailsLoaded || _loadingDetails) return;
+    if (c.detailsChecked || _loadingDetails) return;
     _loadingDetails = true;
     try {
-      final full = await ApiClient.fetchDiscoveryProfile(c.publicId);
-      c.applyDetails(full);
+      final json = await ApiClient.fetchDiscoveryProfileRaw(c.publicId,
+          version: c.version, hasDetails: c.detailsLoaded);
+      final changed = c.applyServerProfile(json);
+      c.detailsChecked = true;
+      if (changed) await CardCache.instance.putAll([c]);
+    } on ApiException catch (e) {
+      // سرور گفته این کاربر دیگه نیست (مثلاً بن شده): از کش و صف‌ها پاک می‌شه؛ کرش نمی‌کنیم.
+      if (e.code == 'profile_not_found') {
+        c.detailsChecked = true;
+        await purgeGoneCard(c.publicId);
+      }
     } catch (_) {
-      // شبکه/خطا: کارت با همون اطلاعاتِ سبک می‌مونه؛ دفعه‌ی بعد دوباره تلاش می‌شه.
+      // شبکه/خطا: کارت با همون اطلاعاتِ فعلی (سبک یا کش‌شده) می‌مونه؛ دفعه‌ی بعد دوباره تلاش می‌شه.
     }
     _loadingDetails = false;
     if (mounted) setState(() {});
@@ -668,7 +684,7 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
               spacing: 8,
               runSpacing: 8,
               children: _basicsItems()
-                  .take(8)
+                  .take(14)
                   .map((e) => _Chip(text: e.$2, icon: e.$1))
                   .toList(),
             ),
@@ -692,6 +708,18 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
     final c = widget.candidate;
     final out = <(IconData, String)>[];
 
+    final job = [c.jobTitle, c.jobCompany]
+        .where((e) => e != null && e.trim().isNotEmpty)
+        .map((e) => e!.trim())
+        .join(' · ');
+    if (job.isNotEmpty) out.add((Icons.work_outline, job));
+    if (c.cityName != null && c.cityName!.trim().isNotEmpty) {
+      out.add((Icons.location_city_outlined, 'زندگی در ${c.cityName!.trim()}'));
+    }
+    if (c.heightCm != null && c.heightCm! > 0) {
+      out.add((Icons.height, '${c.heightCm} سانتی‌متر'));
+    }
+
     if (c.educationLevel != null) {
       final l = _labelOf(kEducationOptions, c.educationLevel!);
       if (l != null) out.add((Icons.school_outlined, l));
@@ -705,6 +733,13 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
         if (l == null) continue;
         out.add((_iconFor(cat.id, v), l));
       }
+    }
+
+    final wc = _labelOf(kWantChildrenOptions, c.wantChildren ?? '');
+    if (wc != null) out.add((Icons.child_care_outlined, wc));
+    if (c.languages.isNotEmpty) {
+      final names = [for (final id in c.languages) _labelOf(kLanguageOptions, id) ?? id];
+      out.add((Icons.translate, names.join('، ')));
     }
 
     // ترتیب مثل اسکرین‌شات: مشروب، سیگار، ورزش، حیوون، ارتباط، ... ، برج

@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../cache/card_resolver.dart';
 import 'package:flutter/services.dart';
 import '../api_client.dart';
 import '../likes/likes_data.dart';
@@ -119,6 +120,9 @@ class _LikesScreenState extends State<LikesScreen> {
         _showMatchDialog(entry);
       }
     } on ApiException catch (e) {
+      if (e.code == 'profile_not_found') {
+        purgeGoneCard(entry.candidate.publicId); // بن‌شده/حذف‌شده: از کش و صف‌ها هم پاک بشه
+      }
       if (!mounted) return;
       if (e.code == 'already_matched' || e.code == 'profile_not_found') {
         await LikesStore.instance.refreshFirstPage(); // وضعیت تو بک‌اند عوض شده؛ فقط صفحه‌ی اول.
@@ -195,6 +199,26 @@ class _LikesScreenState extends State<LikesScreen> {
     );
   }
 
+  /// دکمه‌ی راهنما (بالا-چپِ صفحه): توضیحِ این‌که چه کسایی تو این صفحه دیده می‌شن و چه کسایی نه.
+  void _showInfoSheet() {
+    HapticFeedback.lightImpact();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => const _LikesInfoSheet(),
+    );
+  }
+
+  Widget _infoButton() => IconButton(
+        tooltip: 'راهنمای لایک‌ها',
+        onPressed: _showInfoSheet,
+        icon: const Icon(Icons.info_outline_rounded, color: Color(0xFF8E8E93), size: 24),
+      );
+
   @override
   Widget build(BuildContext context) {
     final topPad = MediaQuery.of(context).padding.top;
@@ -212,7 +236,12 @@ class _LikesScreenState extends State<LikesScreen> {
               if (widget.isPremium && !_firstLoadDone) {
                 return const Center(child: CircularProgressIndicator(color: Colors.white70));
               }
-              return _EmptyLikes(topPad: topPad);
+              return Stack(
+                children: [
+                  _EmptyLikes(topPad: topPad),
+                  Positioned(left: 4, top: 4, child: _infoButton()),
+                ],
+              );
             }
             final superLikes = _likes.where((e) => e.isSuperLike).toList();
             final normalLikes = _likes.where((e) => !e.isSuperLike).toList();
@@ -220,27 +249,49 @@ class _LikesScreenState extends State<LikesScreen> {
             final totalLikes = widget.isPremium
                 ? (LikesStore.instance.count > _likes.length ? LikesStore.instance.count : _likes.length)
                 : _likes.length;
+            // تعدادِ سوپرلایک‌ها: اشتراکی از لیستِ لودشده، رایگان از شمارنده (بیشترِ این دو).
+            final totalSupers = AppCounters.instance.superLikeCount > superLikes.length
+                ? AppCounters.instance.superLikeCount
+                : superLikes.length;
             return CustomScrollView(
               controller: _scroll,
               slivers: [
                 SliverPadding(
                   padding: EdgeInsets.only(top: topPad > 0 ? 0 : 8),
                   sliver: SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 2),
-                      child: const Text(
-                        'لایک‌ها',
-                        style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800),
-                      ),
+                    // دکمه‌ی راهنما همیشه سمتِ «چپِ» فیزیکیِ صفحه‌ست (نه شروعِ RTL).
+                    child: Stack(
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.fromLTRB(20, 12, 20, 2),
+                          child: Text(
+                            'لایک‌ها',
+                            style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        Positioned(left: 4, top: 8, child: _infoButton()),
+                      ],
                     ),
                   ),
                 ),
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                    child: Text(
-                      '$totalLikes نفر پروفایلتو لایک کرده‌ان',
-                      style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 15),
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+                    child: Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      children: [
+                        _CountChip(
+                          icon: Icons.favorite_rounded,
+                          color: const Color(0xFFFFC629),
+                          label: '$totalLikes لایک',
+                        ),
+                        _CountChip(
+                          icon: Icons.star_rounded,
+                          color: const Color(0xFF3D9CF0),
+                          label: '$totalSupers سوپرلایک',
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -776,6 +827,108 @@ class _EmptyLikes extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+
+/// چیپِ شمارنده‌ی بالای صفحه‌ی لایک‌ها (تعدادِ لایک / سوپرلایک).
+class _CountChip extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String label;
+  const _CountChip({required this.icon, required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 6),
+          Text(label,
+              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+/// توضیحِ این‌که تو صفحه‌ی لایک‌ها چه کسایی دیده می‌شن و چه کسایی از اینجا حذف می‌شن.
+/// قوانین دقیقاً همون شرطِ سمتِ سرورن (store/likes.go → pendingLikesWhere).
+class _LikesInfoSheet extends StatelessWidget {
+  const _LikesInfoSheet();
+
+  Widget _section(String title, IconData icon, Color color, List<String> lines) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 8),
+              Text(title,
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (final l in lines)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text('• $l',
+                  style: const TextStyle(color: Color(0xFFB0B0B5), fontSize: 14, height: 1.55)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(22, 20, 22, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('این صفحه چطور کار می‌کنه؟',
+                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 16),
+            _section('کیا اینجا دیده می‌شن', Icons.visibility_outlined, const Color(0xFF34C759), [
+              'کسایی که پروفایلت رو لایک کرده‌ان و هنوز نه لایکشون کردی، نه ردشون کردی.',
+              'سوپرلایک‌ها جدا و بالاتر از لایک‌های معمولی نشون داده می‌شن.',
+              'لایک‌ها با شمارنده‌ی بالای صفحه می‌آن؛ عدد «لایک» شامل سوپرلایک‌ها هم هست.',
+            ]),
+            _section('کیا از اینجا حذف می‌شن', Icons.visibility_off_outlined, const Color(0xFFFF453A), [
+              'کسی که لایک یا ردش کنی (چه از همین صفحه، چه از صفحه‌ی اصلی).',
+              'کسی که باهاش متچ بشی — از این به بعد تو لیست چت‌هاست.',
+              'کسی که بلاکش کنی یا بلاکت کرده باشه.',
+              'کسی که حسابش توسط تیم پشتیبانی مسدود شده باشه.',
+              'کسی که لایکش رو برداشته باشه یا پروفایلش حذف شده باشه.',
+            ]),
+            _section('نکته‌ها', Icons.lightbulb_outline_rounded, const Color(0xFFFFC629), [
+              'کاربرهای عادی فقط تعداد لایک‌ها رو می‌بینن (بلورشده) و این عدد هر یک ساعت به‌روز می‌شه.',
+              'با اشتراک، هویتِ همه‌ی لایک‌کننده‌ها باز می‌شه و می‌تونی مستقیم لایکشون کنی و متچ بشی.',
+            ]),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('فهمیدم', style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+            ),
+          ],
         ),
       ),
     );

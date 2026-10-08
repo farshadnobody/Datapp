@@ -122,7 +122,9 @@ class ProfileInput {
   final String? cityName; // برچسب نمایشی «زندگی در ...» (نه مختصات)
   final bool showCityOnProfile;
   final String? wantChildren;
-  final List<String> languages;
+  // null = «کلید رو نفرست» (سرور مقدار قبلی رو دست‌نخورده نگه می‌داره)؛ [] = «همه‌ی
+  // زبان‌ها پاک بشن». صفحه‌هایی که زبان رو نمی‌شناسن (اونبوردینگ، ویرایش قدیمی) null می‌ذارن.
+  final List<String>? languages;
 
   ProfileInput({
     required this.name,
@@ -148,7 +150,7 @@ class ProfileInput {
     this.cityName,
     this.showCityOnProfile = true,
     this.wantChildren,
-    this.languages = const [],
+    this.languages,
   });
 
   Map<String, dynamic> toJson() => {
@@ -170,12 +172,12 @@ class ProfileInput {
         'lifestyle': lifestyle,
         'about_you': aboutYou,
         if (heightCm != null) 'height_cm': heightCm,
-        if (jobTitle != null && jobTitle!.isNotEmpty) 'job_title': jobTitle,
-        if (jobCompany != null && jobCompany!.isNotEmpty) 'job_company': jobCompany,
-        if (cityName != null && cityName!.isNotEmpty) 'city_name': cityName,
+        if (jobTitle != null) 'job_title': jobTitle, // خالی = پاک کردن
+        if (jobCompany != null) 'job_company': jobCompany,
+        if (cityName != null) 'city_name': cityName,
         'show_city_on_profile': showCityOnProfile,
         if (wantChildren != null) 'want_children': wantChildren,
-        'languages': languages,
+        if (languages != null) 'languages': languages,
       };
 }
 
@@ -317,17 +319,21 @@ Map<String, String> _stringMap(dynamic v) {
 
 class DiscoveryCandidate {
   final String publicId;
-  final String name;
-  final int age;
-  final String bio;
-  final List<String> interests;
+  // «صورتِ کارت» (name/age/bio/interests/photos/version) عمداً final نیست: وقتی کاربر
+  // فلشِ کارت رو می‌زنه و سرور می‌گه نسخه‌ی کارت عوض شده، کل کارت همین‌جا به‌روز می‌شه
+  // (applyServerProfile).
+  String name;
+  int age;
+  String bio;
+  List<String> interests;
   List<PromptAnswer> prompts;
-  final List<Photo> photos;
-  final double? distanceKm;
+  List<Photo> photos;
+  // کیلومترِ کاملِ گردشده، وابسته به بیننده → تو CardCache نمی‌ره؛ هر بار از سرور.
+  double? distanceKm;
 
   /// نسخه‌ی کارت = profiles.updated_at سرور به میلی‌ثانیه (UnixMilli). CardCache با همین
   /// تصمیم می‌گیره کارت دوباره دانلود بشه یا نه. اگه سرور نفرستاد 0.
-  final int version;
+  int version;
 
   // null یعنی هیچ‌وقت swipe نشده. بعد از «برداشتنِ لایک» تو همین session صفر می‌شه.
   String? previousDirection;
@@ -341,11 +347,20 @@ class DiscoveryCandidate {
   Map<String, String> aboutYou; // {"communication": "phone_caller", ...}
   String? activityStatus; // 'active' | 'recent' | 'new' | null
   String? wantChildren; // مثلاً "want_children" — برای دسته‌ی «بچه می‌خوام» تو اکسپلور
-  bool verified; // برای دسته‌ی «تأیید عکس» تو اکسپلور؛ اگه بک‌اند نفرسته false می‌مونه
+  String? school;
+  int? heightCm;
+  String? jobTitle;
+  String? jobCompany;
+  String? cityName; // فقط وقتی خودِ کاربر اجازه‌ی نمایش داده باشه از سرور میاد
+  List<String> languages;
 
   /// false = کارتِ «سبک» (فقط شناسه، نام، سن، درباره، علایق، عکس‌ها). جزئیات (پرامپت،
   /// سبک زندگی، تحصیلات...) با زدنِ فلشِ کارت از /api/discovery/profile گرفته می‌شه.
   bool detailsLoaded;
+
+  /// فقط تو همین session (تو کش نمی‌ره): آیا برای این کارت، بعد از زدنِ فلش، با سرور
+  /// نسخه‌ها مقایسه شده؟ جزئیاتِ کش‌شده هم یه بار با سرور چک می‌شه.
+  bool detailsChecked = false;
 
   /// جزئیاتِ گرفته‌شده از سرور رو روی همین کارت می‌ذاره.
   void applyDetails(DiscoveryCandidate full) {
@@ -356,14 +371,66 @@ class DiscoveryCandidate {
     aboutYou = full.aboutYou;
     activityStatus = full.activityStatus;
     wantChildren = full.wantChildren;
-    verified = full.verified;
+    school = full.school;
+    heightCm = full.heightCm;
+    jobTitle = full.jobTitle;
+    jobCompany = full.jobCompany;
+    cityName = full.cityName;
+    languages = full.languages;
     detailsLoaded = true;
+  }
+
+  /// پاسخِ /api/discovery/profile?id=..&v=<نسخه>&d=<جزئیات رو دارم> رو روی همین کارت می‌ذاره.
+  ///  - full=true (نسخه‌ی اپ کهنه بود): صورتِ کارت (اسم، سن، عکس‌ها، بیو، علایق)، version و
+  ///    جزئیات همه جایگزین می‌شن.
+  ///  - full=false و details_included=false (نسخه یکی بود و اپ جزئیات رو داشت): هیچ‌چیزِ
+  ///    کارت عوض نمی‌شه؛ فقط وضعیتِ وابسته به بیننده (previous_direction/super_liked_me).
+  ///  - full=false بدونِ details_included=false: صورتِ کارت همونه، جزئیات جایگزین می‌شن.
+  /// برمی‌گردونه true اگه چیزی از محتوای کارت یا جزئیاتش عوض شده (یعنی کش باید به‌روز شه).
+  bool applyServerProfile(Map<String, dynamic> json) {
+    final isFull = json['full'] == true;
+    final detailsIncluded = json['details_included'] != false;
+    if (isFull) {
+      name = json['name'] as String? ?? name;
+      age = (json['age'] as num?)?.toInt() ?? age;
+      bio = json['bio'] as String? ?? '';
+      interests = List<String>.from(json['interests'] ?? const []);
+      photos = _photosFrom(json['photos']);
+      version = (json['version'] as num?)?.toInt() ?? version;
+    }
+    if (detailsIncluded) {
+      prompts = (json['prompts'] as List? ?? const [])
+          .map((e) => PromptAnswer.fromJson(e))
+          .toList();
+      lookingFor = json['looking_for'] as String?;
+      educationLevel = json['education_level'] as String?;
+      school = json['school'] as String?;
+      lifestyle = _stringMap(json['lifestyle']);
+      aboutYou = _stringMap(json['about_you']);
+      wantChildren = json['want_children'] as String?;
+      heightCm = (json['height_cm'] as num?)?.toInt();
+      jobTitle = json['job_title'] as String?;
+      jobCompany = json['job_company'] as String?;
+      cityName = json['city_name'] as String?;
+      languages = List<String>.from(json['languages'] ?? const []);
+    }
+    if (json.containsKey('previous_direction')) {
+      previousDirection = json['previous_direction'] as String?;
+    }
+    if (json.containsKey('super_liked_me')) {
+      superLikedMe = json['super_liked_me'] == true;
+    }
+    if (json.containsKey('distance_km')) {
+      distanceKm = (json['distance_km'] as num?)?.toDouble();
+    }
+    if (detailsIncluded) detailsLoaded = true;
+    return isFull || detailsIncluded;
   }
 
   /// true فقط وقتی بک‌اند تأیید کرده که این آدم واقعاً (تو دیتابیس) کاربرِ فعلی رو
   /// سوپرلایک کرده و هنوز متچ/آنمتچ/بلاکی نیست. هیچ‌وقت از استیت لوکال ساخته
   /// نمی‌شه.
-  final bool superLikedMe;
+  bool superLikedMe;
 
   DiscoveryCandidate({
     required this.publicId,
@@ -382,7 +449,12 @@ class DiscoveryCandidate {
     this.aboutYou = const {},
     this.activityStatus,
     this.wantChildren,
-    this.verified = false,
+    this.school,
+    this.heightCm,
+    this.jobTitle,
+    this.jobCompany,
+    this.cityName,
+    this.languages = const [],
     this.superLikedMe = false,
     this.detailsLoaded = true,
   });
@@ -409,7 +481,12 @@ class DiscoveryCandidate {
         aboutYou: _stringMap(json['about_you']),
         activityStatus: _activityFrom(json),
         wantChildren: json['want_children'] as String?,
-        verified: json['verified'] ?? false,
+        school: json['school'] as String?,
+        heightCm: (json['height_cm'] as num?)?.toInt(),
+        jobTitle: json['job_title'] as String?,
+        jobCompany: json['job_company'] as String?,
+        cityName: json['city_name'] as String?,
+        languages: List<String>.from(json['languages'] ?? const []),
         superLikedMe: json['super_liked_me'] ?? false,
         detailsLoaded: json['lean'] != true,
       );
@@ -440,8 +517,35 @@ class DiscoveryCandidate {
         'interests': interests,
         'photos': [for (final p in photos) p.url],
         'version': version,
-        'lean': true,
+        // جزئیات (همون‌هایی که با زدنِ فلش میان) فقط وقتی تو کشن که واقعاً گرفته شده باشن؛
+        // نسخه‌ی جزئیات همیشه با version کارت یکیه.
+        'lean': !detailsLoaded,
+        if (detailsLoaded) ...{
+          'prompts': [for (final p in prompts) p.toJson()],
+          'looking_for': lookingFor,
+          'education_level': educationLevel,
+          'school': school,
+          'lifestyle': lifestyle,
+          'about_you': aboutYou,
+          'want_children': wantChildren,
+          'height_cm': heightCm,
+          'job_title': jobTitle,
+          'job_company': jobCompany,
+          'city_name': cityName,
+          'languages': languages,
+        },
       };
+
+  /// کپیِ کامل (با همه‌ی جزئیات) با superLikedMe=true — برای صفِ Discovery.
+  DiscoveryCandidate withSuperLiked() => DiscoveryCandidate(
+        publicId: publicId, name: name, age: age, bio: bio, interests: interests,
+        prompts: prompts, photos: photos, distanceKm: distanceKm, version: version,
+        previousDirection: previousDirection, lookingFor: lookingFor,
+        educationLevel: educationLevel, lifestyle: lifestyle, aboutYou: aboutYou,
+        activityStatus: activityStatus, wantChildren: wantChildren, school: school,
+        heightCm: heightCm, jobTitle: jobTitle, jobCompany: jobCompany, cityName: cityName,
+        languages: languages, superLikedMe: true, detailsLoaded: detailsLoaded,
+      );
 
   // اگه بک‌اند مستقیم `activity_status` بفرسته همون رو می‌گیریم؛ وگرنه از
   // `created_at` و `last_active_at` (ISO 8601) حسابش می‌کنیم.

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../api_client.dart';
+import '../cache/card_resolver.dart';
 import '../models/match_models.dart';
 import '../models/profile_models.dart';
 import '../swipe/location_gate.dart';
@@ -13,11 +14,12 @@ import '../swipe/swipe_header.dart';
 import '../swipe/swipe_onboarding_store.dart';
 import '../swipe/swipe_style.dart';
 import '../widgets/profile_detail_sheet.dart';
-import 'location_picker_screen.dart';
+import 'passport_screen.dart';
 import 'matches_screen.dart';
 import '../widgets/app_network_image.dart';
 import '../subscription/subscription_state.dart';
 import '../subscription/premium_paywall.dart';
+import '../widgets/distance_filter_control.dart';
 import '../swipe/swipe_outbox.dart';
 import '../likes/likes_store.dart';
 import '../cache/discovery_feed.dart';
@@ -252,13 +254,17 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// فیلترِ فاصله مخصوصِ اشتراکیه؛ غیراشتراکی همیشه null (سرور هم همین رو اعمال می‌کنه).
+  double? get _allowedMaxDistance =>
+      SubscriptionState.instance.isPremium ? _maxDistanceKm : null;
+
   double? get _effectiveDistance {
     if (_tab == 1) {
-      final d = _maxDistanceKm;
+      final d = _allowedMaxDistance;
       if (d == null) return _nearbyKm;
       return d < _nearbyKm ? d : _nearbyKm;
     }
-    return _maxDistanceKm;
+    return _allowedMaxDistance;
   }
 
   DiscoveryFeed _buildFeed() {
@@ -272,6 +278,7 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
         minAge: _minAge,
         maxAge: _maxAge,
         maxDistanceKm: _effectiveDistance,
+        nearby: _tab == 1,
         limit: DiscoveryQueue.batchSize,
         exclude: exclude,
         includeSwiped: _browsingAgain,
@@ -451,7 +458,7 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
         if (mounted) _showMatchDialog(result.match!);
       }
     }).catchError((Object e) {
-      _handleSwipeError(e);
+      _handleSwipeError(e, c.publicId);
       // ثبت swipe شکست خورد (شبکه/رد شدن تو بک‌اند)؛ چیزی تو تاریخچه‌ی بک‌اند
       // نیست، پس رکوردِ Rewindش رو هم برمی‌داریم.
       RewindMemory.instance.discardLatestFor(c.publicId);
@@ -560,7 +567,11 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
   }
 
   /// خطاهای قفلِ سوپرلایک که سرور برمی‌گردونه (وقتی وضعیتِ اپ قدیمی بوده).
-  void _handleSwipeError(Object e) {
+  void _handleSwipeError(Object e, [String? publicId]) {
+    if (e is ApiException && e.code == 'profile_not_found' && publicId != null) {
+      // کاربر دیگه وجود نداره (مثلاً بن شده): از کش و صف‌ها پاک می‌شه.
+      purgeGoneCard(publicId);
+    }
     if (e is! ApiException || !mounted) return;
     if (e.code == 'premium_required') {
       SubscriptionState.instance.refresh();
@@ -777,7 +788,7 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
       }
     } catch (e) {
       if (pushed) RewindMemory.instance.discardLatestFor(candidate.publicId);
-      _handleSwipeError(e);
+      _handleSwipeError(e, candidate.publicId);
     }
   }
 
@@ -820,7 +831,7 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
 
   Future<void> _searchAndShow(String publicId) async {
     try {
-      final candidate = await ApiClient.fetchDiscoveryProfile(publicId);
+      final candidate = await resolveCard(publicId);
       if (mounted) _openDetail(candidate);
     } on NetworkException {
       _toast('ارتباط با سرور برقرار نشد.');
@@ -890,31 +901,22 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
                       }),
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      tempDistance == null
-                          ? 'حداکثر فاصله: بدون محدودیت'
-                          : 'حداکثر فاصله: ${tempDistance!.round()} کیلومتر',
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    Slider(
-                      min: 1,
-                      max: 200,
-                      divisions: 199,
-                      value: tempDistance ?? 200,
-                      onChanged: (v) =>
-                          setSheetState(() => tempDistance = v >= 200 ? null : v),
+                    DistanceFilterControl(
+                      value: tempDistance,
+                      textStyle: const TextStyle(color: Colors.white),
+                      onChanged: (v) => setSheetState(() => tempDistance = v),
                     ),
                     const SizedBox(height: 8),
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(Icons.map_outlined, color: Colors.white),
-                      title: const Text('انتخاب موقعیت روی نقشه',
+                      title: const Text('موقعیت مکانی (Passport)',
                           style: TextStyle(color: Colors.white)),
                       onTap: () async {
                         Navigator.pop(sheetContext);
                         final changed = await Navigator.push<bool>(
                           context,
-                          MaterialPageRoute(builder: (_) => const LocationPickerScreen()),
+                          MaterialPageRoute(builder: (_) => const PassportScreen()),
                         );
                         if (changed == true && mounted) _reload();
                       },
