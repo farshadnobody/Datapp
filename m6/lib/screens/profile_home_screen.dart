@@ -59,6 +59,7 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
   String? _wantChildren;
   List<String> _languages = [];
   String _bio = '';
+  String _name = '';
 
   @override
   void initState() {
@@ -100,6 +101,7 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
         _wantChildren = profile.wantChildren;
         _languages = List.of(profile.languages);
         _bio = profile.bio;
+        _name = profile.name;
       });
       _loadPrivatePhotos();
     } catch (e) {
@@ -121,7 +123,7 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
     final p = _profile;
     if (p == null) return;
     final input = ProfileInput(
-      name: p.name,
+      name: _name,
       birthDate: p.birthDate,
       gender: _genders.isNotEmpty ? _genders.first : p.gender,
       interestedIn: p.interestedInMulti.isNotEmpty ? p.interestedInMulti.first : p.interestedIn,
@@ -192,7 +194,7 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
   MyProfile get _liveProfile {
     final p = _profile!;
     return MyProfile(
-      name: p.name,
+      name: _name,
       birthDate: p.birthDate,
       age: p.age,
       gender: p.gender,
@@ -399,6 +401,49 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
     _persist();
   }
 
+  Future<void> _editName() async {
+    final controller = TextEditingController(text: _name);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          backgroundColor: AppDark.cardAlt,
+          title: const Text('ویرایش نام', style: TextStyle(color: Colors.white)),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLength: 40, // MaxNameLength بک‌اند
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(hintText: 'نام'),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('لغو')),
+            TextButton(
+              onPressed: () {
+                final v = controller.text.trim();
+                if (v.isNotEmpty) Navigator.pop(dialogContext, v);
+              },
+              child: const Text('ذخیره'),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    if (result == null || result == _name || !mounted) return;
+    final previous = _name;
+    setState(() => _name = result);
+    await _persist();
+    // _persist فقط خطا رو نشون می‌ده؛ اگه از سرور برگشته باشیم نامِ ذخیره‌شده‌ی واقعی رو بگیر.
+    try {
+      final fresh = await ApiClient.fetchMyProfile();
+      if (mounted) setState(() => _name = fresh.name);
+    } catch (_) {
+      if (mounted && _name != result) setState(() => _name = previous);
+    }
+  }
+
   void _openSettingsSheet() {
     showModalBottomSheet(
       context: context,
@@ -407,6 +452,14 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
         textDirection: TextDirection.rtl,
         child: SafeArea(
           child: Wrap(children: [
+            ListTile(
+              leading: const Icon(Icons.edit_outlined, color: Colors.white),
+              title: const Text('ویرایش نام', style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(context);
+                _editName();
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.white),
               title: const Text('خروج از حساب', style: TextStyle(color: Colors.white)),
@@ -510,7 +563,7 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
             children: [
               Row(children: [
                 Flexible(
-                  child: Text(_profile!.name,
+                  child: Text(_name,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
                 ),
@@ -1072,7 +1125,6 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
       padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(color: AppDark.card, borderRadius: BorderRadius.circular(14)),
       child: Row(children: [
-        stat('سوپرلایک'),
         stat('بوست'),
         stat('اشتراک'),
       ]),
