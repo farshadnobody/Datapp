@@ -128,7 +128,9 @@ Future<IdentityResult?> showIdentitySheet(
         );
       }),
     ),
-  );
+  ).then((r) => r ?? (changed
+      ? IdentityResult(genders: g, showGenderOnProfile: showG, orientations: o, showOrientationOnProfile: showO)
+      : null));
 }
 
 /// صفحه‌ی «I Am» — تک‌انتخابی از بین مرد/زن/فراتر از دوجنسیتی.

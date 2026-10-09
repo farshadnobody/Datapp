@@ -8,6 +8,12 @@ import '../style/app_colors.dart';
 // اجزای مشترک
 // -----------------------------------------------------------------------
 
+bool _sameStringMap(Map<String, String> a, Map<String, String> b) =>
+    a.length == b.length && a.entries.every((e) => b[e.key] == e.value);
+
+bool _sameStringList(List<String> a, List<String> b) =>
+    a.length == b.length && a.toSet().containsAll(b);
+
 Future<T?> _showSheet<T>(BuildContext context, Widget child) {
   return showModalBottomSheet<T>(
     context: context,
@@ -374,7 +380,16 @@ Future<BasicsResult?> showBasicsSheet(
         ),
       );
     }),
-  );
+  ).then((r) => r ?? ((zodiacSel == zodiac && eduSel == educationLevel && childrenSel == wantChildren &&
+            commSel == communication && loveSel == loveLanguage)
+        ? null
+        : BasicsResult(
+            zodiac: zodiacSel,
+            educationLevel: eduSel,
+            wantChildren: childrenSel,
+            communication: commSel,
+            loveLanguage: loveSel,
+          )));
 }
 
 // -----------------------------------------------------------------------
@@ -440,7 +455,7 @@ Future<Map<String, String>?> showLifestyleSheet(BuildContext context, Map<String
         ),
       );
     }),
-  );
+  ).then((r) => r ?? (_sameStringMap(selections, initial) ? null : selections));
 }
 
 // -----------------------------------------------------------------------
@@ -519,5 +534,5 @@ Future<List<String>?> showLanguagesSheet(BuildContext context, List<String> init
         ),
       );
     }),
-  );
+  ).then((r) => r ?? (_sameStringList(selected, initial) ? null : selected));
 }

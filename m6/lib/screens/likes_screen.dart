@@ -102,35 +102,44 @@ class _LikesScreenState extends State<LikesScreen> {
   }
 
   Future<void> _openProfile(LikeEntry entry) async {
-    final liked = await Navigator.push<bool>(
+    // همون ترتیبِ گرید (اول سوپرلایک‌ها)؛ کاربر می‌تونه بینِ کارت‌ها سواپ کنه.
+    final ordered = [
+      ..._likes.where((e) => e.isSuperLike && !e.locked),
+      ..._likes.where((e) => !e.isSuperLike && !e.locked),
+    ];
+    final start = ordered.indexWhere((e) => e.candidate.publicId == entry.candidate.publicId);
+    if (start < 0) return;
+    await Navigator.push<void>(
       context,
-      MaterialPageRoute(builder: (_) => _LikeProfileDetail(entry: entry)),
+      MaterialPageRoute(
+        builder: (_) => _LikesPager(entries: ordered, initialIndex: start, onAction: _handleLikeAction),
+      ),
     );
-    if (liked == null) return;
+  }
 
-    // منبع حقیقت بک‌اندِ: لایک/رد *واقعاً* ثبت می‌شه (قبلاً فقط لوکال بود و
-    // «متچ» فیک نشون داده می‌شد). فقط بعد از جوابِ سرور لیست عوض می‌شه.
+  /// لایک/ردِ واقعی روی بک‌اند. true = ثبت شد و کارت باید از لیست حذف بشه.
+  Future<bool> _handleLikeAction(LikeEntry entry, bool liked) async {
+    // منبع حقیقت بک‌اندِ: فقط بعد از جوابِ سرور لیست عوض می‌شه.
     try {
       final result = await ApiClient.swipe(entry.candidate.publicId, liked ? 'like' : 'pass');
       LikesStore.instance.remove(entry.candidate.publicId); // فقط از لیست؛ کارت تو CardCache می‌مونه
-      if (!mounted) return;
-      setState(() => _likes.remove(entry));
-      if (result.matched) {
-        // لایکِ pending الان تبدیل به متچ شده (از Likes You حذف شد).
-        _showMatchDialog(entry);
-      }
+      if (!mounted) return true;
+      setState(() => _likes.removeWhere((e) => e.candidate.publicId == entry.candidate.publicId));
+      if (result.matched) _showMatchDialog(entry);
+      return true;
     } on ApiException catch (e) {
       if (e.code == 'profile_not_found') {
         purgeGoneCard(entry.candidate.publicId); // بن‌شده/حذف‌شده: از کش و صف‌ها هم پاک بشه
       }
-      if (!mounted) return;
       if (e.code == 'already_matched' || e.code == 'profile_not_found') {
         await LikesStore.instance.refreshFirstPage(); // وضعیت تو بک‌اند عوض شده؛ فقط صفحه‌ی اول.
-      } else {
-        _toast('ثبت انجام نشد. دوباره تلاش کن.');
+        return true;
       }
+      if (mounted) _toast('ثبت انجام نشد. دوباره تلاش کن.');
+      return false;
     } catch (_) {
       if (mounted) _toast('ارتباط با سرور برقرار نشد.');
+      return false;
     }
   }
 
@@ -585,7 +594,10 @@ class _LikeCard extends StatelessWidget {
 /// چون طرف قبلاً لایک‌مون کرده، بلافاصله مچ می‌شه — دقیقاً رفتارِ تیندر.
 class _LikeProfileDetail extends StatelessWidget {
   final LikeEntry entry;
-  const _LikeProfileDetail({required this.entry});
+  final VoidCallback onLike;
+  final VoidCallback onPass;
+  final bool busy;
+  const _LikeProfileDetail({super.key, required this.entry, required this.onLike, required this.onPass, this.busy = false});
 
   @override
   Widget build(BuildContext context) {
@@ -662,13 +674,13 @@ class _LikeProfileDetail extends StatelessWidget {
                 _RoundActionButton(
                   icon: Icons.close,
                   bg: const Color(0xFF3C3C3E),
-                  onTap: () => Navigator.pop(context, false),
+                  onTap: busy ? () {} : onPass,
                 ),
                 const SizedBox(width: 28),
                 _RoundActionButton(
                   icon: Icons.favorite,
                   bg: const Color(0xFFE9190C),
-                  onTap: () => Navigator.pop(context, true),
+                  onTap: busy ? () {} : onLike,
                 ),
               ],
             ),
@@ -931,6 +943,60 @@ class _LikesInfoSheet extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+
+/// صفحه‌ی بازِ پروفایلِ لایک‌کننده‌ها — بینِ کارت‌ها می‌شه سواپ کرد (چپ/راست).
+/// لایک/رد → ثبت روی بک‌اند → کارت حذف و کارتِ بعدی میاد؛ آخرین کارت که تموم شد صفحه بسته می‌شه.
+class _LikesPager extends StatefulWidget {
+  final List<LikeEntry> entries;
+  final int initialIndex;
+  final Future<bool> Function(LikeEntry entry, bool liked) onAction;
+  const _LikesPager({required this.entries, required this.initialIndex, required this.onAction});
+
+  @override
+  State<_LikesPager> createState() => _LikesPagerState();
+}
+
+class _LikesPagerState extends State<_LikesPager> {
+  late final List<LikeEntry> _items = List.of(widget.entries);
+  late final PageController _controller = PageController(initialPage: widget.initialIndex);
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _act(LikeEntry entry, bool liked) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final ok = await widget.onAction(entry, liked);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (!ok) return;
+    setState(() => _items.removeWhere((e) => e.candidate.publicId == entry.candidate.publicId));
+    if (_items.isEmpty) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PageView.builder(
+      controller: _controller,
+      itemCount: _items.length,
+      itemBuilder: (_, i) {
+        final e = _items[i];
+        return _LikeProfileDetail(
+          key: ValueKey(e.candidate.publicId),
+          entry: e,
+          busy: _busy,
+          onLike: () => _act(e, true),
+          onPass: () => _act(e, false),
+        );
+      },
     );
   }
 }

@@ -606,9 +606,6 @@ class ApiClient {
     return list.map((e) => ConversationSummary.fromJson(e)).toList();
   }
 
-  /// GET /api/likes/summary
-  /// جواب: {"count": N, "preview_photo_urls": [...]} — عکس‌های پیش‌نمایش
-  /// باید از سمت بک‌اند محوشده/سانسورشده بیان (چون هنوز متچ نشدن).
   /// GET /api/subscription — وضعیتِ اشتراک و سهمیه‌ی امروزِ سوپرلایک.
   static Future<SubscriptionStatus> fetchSubscription() async {
     final response = await _get('/api/subscription', authenticated: true);
@@ -688,18 +685,9 @@ class ApiClient {
     return list.map((e) => Promo.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  static Future<LikesSummary> fetchLikesSummary() async {
-    final response = await _get('/api/likes/summary', authenticated: true);
-    if (response.statusCode != 200) {
-      final data = jsonDecode(response.body);
-      throw ApiException(data['error'] ?? 'unknown_error');
-    }
-    return LikesSummary.fromJson(jsonDecode(response.body));
-  }
-
   /// GET /api/likes/list
   /// جواب: آرایه‌ای از پروفایلِ کامل + is_super_like/liked_at — برای گریدِ
-  /// صفحه‌ی «لایک‌ها» (نه فقط شمارش خام مثل fetchLikesSummary).
+  /// صفحه‌ی «لایک‌ها» .
   static Future<List<Map<String, dynamic>>> fetchLikesList() async {
     final response = await _get('/api/likes/list', authenticated: true);
     if (response.statusCode != 200) {

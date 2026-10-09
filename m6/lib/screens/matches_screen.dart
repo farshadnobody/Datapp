@@ -8,10 +8,8 @@ import '../widgets/app_network_image.dart';
 import '../chat/conversations_store.dart';
 import '../bootstrap/bootstrap_service.dart';
 
-/// لیست چت — سرِ صفحه، نوارِ جستجو، ردیفِ «متچ‌های جدید» ، و پایینش لیستِ «پیام‌ها». دیتا از `GET /api/conversations` و
-/// `GET /api/likes/summary` میاد — این دو اندپوینت هنوز تو بک‌اند نیستن
-/// (به ApiClient اضافه‌شون کردم، همین‌جا منتظرِ 404/خطا می‌مونه تا وصل
-/// بشن).
+/// لیست چت — سرِ صفحه، نوارِ جستجو، ردیفِ «متچ‌های جدید» (بدونِ شمارنده/پیش‌نمایشِ لایک)،
+/// و پایینش لیستِ «پیام‌ها». دیتا از `GET /api/conversations` میاد.
 class MatchesScreen extends StatefulWidget {
   const MatchesScreen({super.key});
 

@@ -269,7 +269,7 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
 
   DiscoveryFeed _buildFeed() {
     final mode = _browsingAgain ? 'all' : 'new';
-    final filters = 'a$_minAge-$_maxAge|d${_effectiveDistance ?? 'x'}';
+    final filters = 't$_tab|a$_minAge-$_maxAge|d${_effectiveDistance ?? 'x'}';
     return DiscoveryFeed(
       key: 'swipe|$filters|$mode',
       filters: filters,
@@ -910,10 +910,17 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(Icons.map_outlined, color: Colors.white),
-                      title: const Text('موقعیت مکانی (Passport)',
+                      title: const Text('تغییر موقعیت مکانی',
                           style: TextStyle(color: Colors.white)),
+                      trailing: SubscriptionState.instance.isPremium
+                          ? null
+                          : const Icon(Icons.lock_outline_rounded, size: 18, color: Color(0xFFFFC629)),
                       onTap: () async {
                         Navigator.pop(sheetContext);
+                        if (SubscriptionState.instance.loaded && !SubscriptionState.instance.isPremium) {
+                          showPremiumPaywall(context, PaywallReason.passport);
+                          return;
+                        }
                         final changed = await Navigator.push<bool>(
                           context,
                           MaterialPageRoute(builder: (_) => const PassportScreen()),

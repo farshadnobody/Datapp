@@ -109,20 +109,3 @@ class ConversationSummary {
         state: json['state'] as String?,
       );
 }
-
-/// خلاصه‌ی «کی لایکم کرده» برای کارت تیزرِ بالای صفحه‌ی چت — از
-/// `GET /api/likes/summary` (هنوز پیاده نشده). previewPhotoUrls معمولاً
-/// باید محوشده/سانسورشده از سمت بک‌اند بیاد (چون هنوز متچ نشدن).
-class LikesSummary {
-  final int count;
-  final int superLikeCount;
-  final List<String> previewPhotoUrls;
-
-  LikesSummary({required this.count, this.superLikeCount = 0, this.previewPhotoUrls = const []});
-
-  factory LikesSummary.fromJson(Map<String, dynamic> json) => LikesSummary(
-        count: json['count'] ?? 0,
-        superLikeCount: json['super_like_count'] ?? 0,
-        previewPhotoUrls: List<String>.from(json['preview_photo_urls'] ?? []),
-      );
-}

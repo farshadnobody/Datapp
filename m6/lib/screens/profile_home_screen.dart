@@ -10,12 +10,14 @@ import 'bio_prompt_screens.dart';
 import 'education_screen.dart';
 import 'identity_screens.dart';
 import 'interests_editor_screen.dart';
-import 'living_in_screen.dart';
+import 'passport_screen.dart';
 import 'photo_grid_editor_screen.dart';
 import 'preview_profile_screen.dart';
 import 'private_photos_screen.dart';
 import 'profile_sheets.dart';
 import 'start_screen.dart';
+import '../subscription/premium_paywall.dart';
+import '../subscription/subscription_state.dart';
 import '../widgets/app_network_image.dart';
 
 /// صفحه‌ی «پروفایل من» — همون چیزی که با زدن تب Profile تو نوار پایین باز
@@ -162,7 +164,6 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
   int get _lifestyleFilledCount => kLifestyleCategories.where((c) => _lifestyle[c.id] != null).length;
 
   bool get _profileComplete =>
-      (_cityName?.isNotEmpty ?? false) &&
       _heightCm != null &&
       (_jobTitle?.isNotEmpty ?? false) &&
       (_school?.isNotEmpty ?? false) &&
@@ -225,16 +226,15 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
   // اکشن‌های پیل‌ها
   // ---------------------------------------------------------------------
 
-  Future<void> _editLivingIn() async {
-    final result = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => LivingInScreen(initialCity: _cityName)),
-    );
-    if (result == null) return;
-    setState(() {
-      _cityName = result;
-      _showCityOnProfile = result.isNotEmpty;
-    });
-    _persist();
+  /// تغییرِ موقعیتِ مکانیِ کشف (نقشه): فقط اشتراکی‌ها؛ بقیه پی‌وال می‌بینن.
+  /// جزو شرطِ «پروفایلت رو کامل کن» نیست.
+  Future<void> _editLocation() async {
+    if (!SubscriptionState.instance.isPremium) {
+      await showPremiumPaywall(context, PaywallReason.passport);
+      if (mounted) setState(() {});
+      return;
+    }
+    await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => const PassportScreen()));
   }
 
   Future<void> _editHeight() async {
@@ -615,10 +615,9 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
     // تا ListView جدا.
     final row1 = [
       pill(
-        icon: Icons.home_outlined,
-        label: (_cityName?.isNotEmpty ?? false) ? _cityName! : 'زندگی در',
-        filled: _cityName?.isNotEmpty ?? false,
-        onTap: _editLivingIn,
+        icon: SubscriptionState.instance.isPremium ? Icons.public : Icons.lock_outline_rounded,
+        label: 'موقعیت مکانی',
+        onTap: _editLocation,
       ),
       pill(
         icon: Icons.straighten,

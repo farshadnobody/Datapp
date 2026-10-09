@@ -166,17 +166,18 @@ class ProfileInput {
         'sexual_orientations': sexualOrientations,
         'show_orientation_on_profile': showOrientationOnProfile,
         'interested_in_multi': interestedInMulti,
-        if (lookingFor != null) 'looking_for': lookingFor,
-        if (educationLevel != null) 'education_level': educationLevel,
-        if (school != null && school!.isNotEmpty) 'school': school,
+        // خالی ('') = «پاکش کن» — null هم یعنی کاربر مقداری نداره، پس همیشه می‌فرستیم.
+        'looking_for': lookingFor ?? '',
+        'education_level': educationLevel ?? '',
+        'school': school ?? '',
         'lifestyle': lifestyle,
         'about_you': aboutYou,
-        if (heightCm != null) 'height_cm': heightCm,
+        'height_cm': heightCm ?? 0, // ۰ = پاک کردن
         if (jobTitle != null) 'job_title': jobTitle, // خالی = پاک کردن
         if (jobCompany != null) 'job_company': jobCompany,
         if (cityName != null) 'city_name': cityName,
         'show_city_on_profile': showCityOnProfile,
-        if (wantChildren != null) 'want_children': wantChildren,
+        'want_children': wantChildren ?? '',
         if (languages != null) 'languages': languages,
       };
 }
@@ -295,17 +296,17 @@ class MyProfile {
         sexualOrientations: List<String>.from(json['sexual_orientations'] ?? []),
         showOrientationOnProfile: json['show_orientation_on_profile'] ?? false,
         interestedInMulti: List<String>.from(json['interested_in_multi'] ?? []),
-        lookingFor: json['looking_for'] as String?,
-        educationLevel: json['education_level'] as String?,
-        school: json['school'] as String?,
+        lookingFor: _nullIfEmpty(json['looking_for'] as String?),
+        educationLevel: _nullIfEmpty(json['education_level'] as String?),
+        school: _nullIfEmpty(json['school'] as String?),
         lifestyle: _stringMap(json['lifestyle']),
         aboutYou: _stringMap(json['about_you']),
         heightCm: json['height_cm'] as int?,
-        jobTitle: json['job_title'] as String?,
-        jobCompany: json['job_company'] as String?,
-        cityName: json['city_name'] as String?,
+        jobTitle: _nullIfEmpty(json['job_title'] as String?),
+        jobCompany: _nullIfEmpty(json['job_company'] as String?),
+        cityName: _nullIfEmpty(json['city_name'] as String?),
         showCityOnProfile: json['show_city_on_profile'] ?? true,
-        wantChildren: json['want_children'] as String?,
+        wantChildren: _nullIfEmpty(json['want_children'] as String?),
         languages: List<String>.from(json['languages'] ?? []),
       );
 }
@@ -402,16 +403,16 @@ class DiscoveryCandidate {
       prompts = (json['prompts'] as List? ?? const [])
           .map((e) => PromptAnswer.fromJson(e))
           .toList();
-      lookingFor = json['looking_for'] as String?;
-      educationLevel = json['education_level'] as String?;
-      school = json['school'] as String?;
+      lookingFor = _nullIfEmpty(json['looking_for'] as String?);
+      educationLevel = _nullIfEmpty(json['education_level'] as String?);
+      school = _nullIfEmpty(json['school'] as String?);
       lifestyle = _stringMap(json['lifestyle']);
       aboutYou = _stringMap(json['about_you']);
-      wantChildren = json['want_children'] as String?;
+      wantChildren = _nullIfEmpty(json['want_children'] as String?);
       heightCm = (json['height_cm'] as num?)?.toInt();
-      jobTitle = json['job_title'] as String?;
-      jobCompany = json['job_company'] as String?;
-      cityName = json['city_name'] as String?;
+      jobTitle = _nullIfEmpty(json['job_title'] as String?);
+      jobCompany = _nullIfEmpty(json['job_company'] as String?);
+      cityName = _nullIfEmpty(json['city_name'] as String?);
       languages = List<String>.from(json['languages'] ?? const []);
     }
     if (json.containsKey('previous_direction')) {
@@ -475,17 +476,17 @@ class DiscoveryCandidate {
             : (json['distance_km'] as num).toDouble(),
         version: (json['version'] as num?)?.toInt() ?? 0,
         previousDirection: json['previous_direction'],
-        lookingFor: json['looking_for'] as String?,
-        educationLevel: json['education_level'] as String?,
+        lookingFor: _nullIfEmpty(json['looking_for'] as String?),
+        educationLevel: _nullIfEmpty(json['education_level'] as String?),
         lifestyle: _stringMap(json['lifestyle']),
         aboutYou: _stringMap(json['about_you']),
         activityStatus: _activityFrom(json),
-        wantChildren: json['want_children'] as String?,
-        school: json['school'] as String?,
+        wantChildren: _nullIfEmpty(json['want_children'] as String?),
+        school: _nullIfEmpty(json['school'] as String?),
         heightCm: (json['height_cm'] as num?)?.toInt(),
-        jobTitle: json['job_title'] as String?,
-        jobCompany: json['job_company'] as String?,
-        cityName: json['city_name'] as String?,
+        jobTitle: _nullIfEmpty(json['job_title'] as String?),
+        jobCompany: _nullIfEmpty(json['job_company'] as String?),
+        cityName: _nullIfEmpty(json['city_name'] as String?),
         languages: List<String>.from(json['languages'] ?? const []),
         superLikedMe: json['super_liked_me'] ?? false,
         detailsLoaded: json['lean'] != true,
@@ -568,3 +569,8 @@ class DiscoveryCandidate {
     return null;
   }
 }
+
+
+/// بک‌اند برای فیلدِ پر نشده رشته‌ی خالی می‌فرسته؛ تو اپ «خالی» باید null باشه
+/// (وگرنه شمارنده‌ی Basics و هشدار «پروفایلت رو کامل کن» اشتباه حساب می‌شن).
+String? _nullIfEmpty(String? v) => (v == null || v.trim().isEmpty) ? null : v;
