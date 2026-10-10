@@ -45,7 +45,7 @@ class LikesStore extends ChangeNotifier {
     for (final r in _refs) {
       final c = CardCache.instance.getIfFresh(r.id, r.version);
       if (c == null) continue;
-      out.add(LikeEntry(candidate: c, isSuperLike: r.isSuper, likedAt: r.likedAt));
+      out.add(LikeEntry(candidate: c, isSuperLike: r.isSuper, likedAt: r.likedAt, viaBoost: r.viaBoost));
     }
     return out;
   }
@@ -118,6 +118,7 @@ class LikesStore extends ChangeNotifier {
             version: (raw['version'] as num?)?.toInt() ?? 0,
             isSuper: raw['is_super_like'] == true,
             likedAt: DateTime.tryParse('${raw['liked_at'] ?? ''}'),
+            viaBoost: raw['via_boost'] == true,
           ),
       ];
 
@@ -167,5 +168,7 @@ class _Ref {
   final int version;
   final bool isSuper;
   final DateTime? likedAt;
-  const _Ref({required this.id, required this.version, required this.isSuper, required this.likedAt});
+  final bool viaBoost;
+  const _Ref(
+      {required this.id, required this.version, required this.isSuper, required this.likedAt, this.viaBoost = false});
 }

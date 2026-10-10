@@ -52,6 +52,14 @@ class DiscoveryQueue {
 
   List<QueueItem> get unseen => [for (final i in items) if (!seen.contains(i.id)) i];
 
+  /// boost_id آیتمِ صف (اگه کارت از بوست اومده)؛ برای ارسال همراهِ swipe.
+  int? boostIdFor(String id) {
+    for (final i in items) {
+      if (i.id == id) return i.boostId;
+    }
+    return null;
+  }
+
   void markSeen(String id) => seen.add(id);
   void unmarkSeen(String id) => seen.remove(id);
 
@@ -65,7 +73,8 @@ class DiscoveryQueue {
       ..addAll(batch.where((b) => !have.contains(b.id)));
     seen.clear();
     fetchedAt = now;
-    exhausted = batch.length < limit;
+    // کارت‌های بوست «اضافه» به دسته‌ن؛ برای تموم‌شدنِ tier فقط کارت‌های عادی حساب می‌شن.
+    exhausted = batch.where((b) => b.boostId == null).length < limit;
   }
 
   /// استکِ قابل‌نمایش از روی CardCache: فقط نخوانده‌هایی که کارتشون (با نسخه‌ی کافی)
@@ -109,13 +118,14 @@ class QueueItem {
   final String? previousDirection; // وابسته به بیننده → تو صف، نه تو کش
   final bool superLikedMe;
   final double? distanceKm; // وابسته به بیننده → تو صف (snapshotِ زمانِ batch)، نه تو کش
+  final int? boostId; // کارت از بوست اومده؛ مالِ آیتمِ صف (نه کارتِ کش‌شده)
   const QueueItem(this.id, this.version,
-      {this.previousDirection, this.superLikedMe = false, this.distanceKm});
+      {this.previousDirection, this.superLikedMe = false, this.distanceKm, this.boostId});
 
   factory QueueItem.fromCandidate(DiscoveryCandidate c) => QueueItem(
         c.publicId, c.version,
         previousDirection: c.previousDirection, superLikedMe: c.superLikedMe,
-        distanceKm: c.distanceKm);
+        distanceKm: c.distanceKm, boostId: c.boostId);
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -123,12 +133,13 @@ class QueueItem {
         if (previousDirection != null) 'prev': previousDirection,
         if (superLikedMe) 'sl': true,
         if (distanceKm != null) 'km': distanceKm,
+        if (boostId != null) 'bid': boostId,
       };
 
   factory QueueItem.fromJson(Map<String, dynamic> j) => QueueItem(
         j['id'] as String, (j['v'] as num).toInt(),
         previousDirection: j['prev'] as String?, superLikedMe: j['sl'] == true,
-        distanceKm: (j['km'] as num?)?.toDouble());
+        distanceKm: (j['km'] as num?)?.toDouble(), boostId: (j['bid'] as num?)?.toInt());
 }
 
 /// ذخیره/بازیابیِ صف‌ها (هر کلید یه فایل زیرِ queues/). نوشتن: tmp → rename.

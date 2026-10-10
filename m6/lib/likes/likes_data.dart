@@ -22,10 +22,14 @@ class LikeEntry {
   final bool isSuperLike;
   final DateTime? likedAt;
 
+  /// این لایک از کارتِ بوستِ خودِ کاربر اومده (علامتِ صاعقه).
+  final bool viaBoost;
+
   LikeEntry({
     required this.candidate,
     this.isSuperLike = false,
     this.likedAt,
+    this.viaBoost = false,
     this.locked = false,
   });
 
@@ -57,6 +61,7 @@ class LikeEntry {
       candidate: DiscoveryCandidate.fromJson(json),
       isSuperLike: isSuper,
       likedAt: likedAt,
+      viaBoost: json['via_boost'] == true,
     );
   }
 }

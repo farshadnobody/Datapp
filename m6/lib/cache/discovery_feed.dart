@@ -52,11 +52,16 @@ class DiscoveryFeed {
     final carried = (q == null || q.isExpired(now)) ? const <String>[] : q.unseen.map((e) => e.id).toList();
     final batch = await fetch({...exclude, ...carried}.toList());
 
+    // boost_id می‌ره رو آیتمِ صف و از بدنه‌ی کارت (که تو کش می‌شینه) پاک می‌شه.
+    final items = [for (final c in batch) QueueItem.fromCandidate(c)];
+    for (final c in batch) {
+      c.boostId = null;
+    }
     await CardCache.instance.putAll(batch);
     final next = q ??
         DiscoveryQueue(key: key, fetchedAt: now, items: [], seen: {}, filters: filters, mode: mode);
     next.applyBatch(
-      [for (final c in batch) QueueItem.fromCandidate(c)],
+      items,
       limit: DiscoveryQueue.batchSize,
       now: now,
     );
@@ -64,6 +69,9 @@ class DiscoveryFeed {
     await DiscoveryQueueStore.instance.save(next);
     return next.resolveStack();
   }
+
+  /// boost_id کارتِ این صف (null = کارتِ عادی).
+  int? boostIdFor(String id) => queue?.boostIdFor(id);
 
   void markSeen(String id) {
     final q = queue;

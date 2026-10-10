@@ -581,6 +581,17 @@ class _LikeCard extends StatelessWidget {
                   ),
                 ),
               ),
+              // لایک/سوپرلایکی که از بوستِ خودت اومده: صاعقه‌ی کوچیک.
+              if (entry.viaBoost)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(color: Color(0xFFF4B0EC), shape: BoxShape.circle),
+                    child: const Icon(Icons.bolt, color: Colors.black, size: 14),
+                  ),
+                ),
             ],
           ),
         ),

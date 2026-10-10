@@ -532,7 +532,9 @@ class ApiClient {
   }
 
   static Future<SwipeResult> swipe(String publicId, String direction,
-      {List<String> pendingPasses = const []}) async {
+      {List<String> pendingPasses = const [],
+      int? boostId, // وقتی کارت از بوست اومده (از آیتمِ صف، نه از بدنه‌ی کارتِ کش‌شده)
+      Map<String, int> pendingPassBoosts = const {}}) async {
     final response = await _post(
         '/api/discovery/swipe',
         {
@@ -540,6 +542,8 @@ class ApiClient {
           'direction': direction,
           // ردهای جمع‌شده همراهِ همین درخواست می‌رن (به‌جای یه درخواستِ جدا)
           if (pendingPasses.isNotEmpty) 'pending_passes': pendingPasses,
+          if (boostId != null) 'boost_id': boostId,
+          if (pendingPassBoosts.isNotEmpty) 'pending_pass_boosts': pendingPassBoosts,
         },
         authenticated: true);
     final data = jsonDecode(response.body);
@@ -550,11 +554,19 @@ class ApiClient {
   }
 
   /// POST /api/discovery/swipes/batch — چندتا «رد» یکجا (حداکثر ۱۰۰).
-  static Future<void> swipeBatch(List<String> publicIds) async {
+  static Future<void> swipeBatch(List<String> publicIds,
+      {Map<String, int> boostIds = const {}}) async {
     final response = await _post(
         '/api/discovery/swipes/batch',
         {
-          'swipes': [for (final id in publicIds) {'public_id': id, 'direction': 'pass'}],
+          'swipes': [
+            for (final id in publicIds)
+              {
+                'public_id': id,
+                'direction': 'pass',
+                if (boostIds[id] != null) 'boost_id': boostIds[id],
+              }
+          ],
         },
         authenticated: true);
     if (response.statusCode != 200) {
@@ -607,6 +619,31 @@ class ApiClient {
   }
 
   /// GET /api/subscription — وضعیتِ اشتراک و سهمیه‌ی امروزِ سوپرلایک.
+  // ===== بوست =====
+  static Future<Map<String, dynamic>> _boostCall(String method, String path) async {
+    final response = method == 'GET'
+        ? await _get(path, authenticated: true)
+        : await _post(path, <String, dynamic>{}, authenticated: true);
+    final data = jsonDecode(response.body);
+    if (response.statusCode != 200) {
+      throw ApiException((data is Map ? data['error'] : null) ?? 'unknown_error');
+    }
+    return Map<String, dynamic>.from(data as Map);
+  }
+
+  /// GET /api/boost/status → {credits, active, can_buy, view_budget, duration_hours}
+  static Future<Map<String, dynamic>> fetchBoostStatus() => _boostCall('GET', '/api/boost/status');
+
+  /// POST /api/boost/activate (از موجودی؛ به چکِ ۴ صبح وابسته نیست)
+  static Future<Map<String, dynamic>> activateBoost() => _boostCall('POST', '/api/boost/activate');
+
+  /// POST /api/boost/buy (فقط وقتی can_buy)
+  static Future<Map<String, dynamic>> buyBoost() => _boostCall('POST', '/api/boost/buy');
+
+  /// GET /api/boost/history?limit=&offset= → {items:[...], has_more}
+  static Future<Map<String, dynamic>> fetchBoostHistory({int limit = 20, int offset = 0}) =>
+      _boostCall('GET', '/api/boost/history?limit=$limit&offset=$offset');
+
   static Future<SubscriptionStatus> fetchSubscription() async {
     final response = await _get('/api/subscription', authenticated: true);
     if (response.statusCode != 200) {

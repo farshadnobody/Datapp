@@ -363,6 +363,10 @@ class DiscoveryCandidate {
   /// نسخه‌ها مقایسه شده؟ جزئیاتِ کش‌شده هم یه بار با سرور چک می‌شه.
   bool detailsChecked = false;
 
+  /// فقط تو پاسخِ فید (کارتِ تزریق‌شده از بوست). عمداً تو toCacheJson نیست و بعد از ساختِ
+  /// QueueItem پاک می‌شه: boost_id مالِ «آیتمِ صف»ـه، نه بدنه‌ی کارتِ کش‌شده.
+  int? boostId;
+
   /// جزئیاتِ گرفته‌شده از سرور رو روی همین کارت می‌ذاره.
   void applyDetails(DiscoveryCandidate full) {
     prompts = full.prompts;
@@ -490,7 +494,7 @@ class DiscoveryCandidate {
         languages: List<String>.from(json['languages'] ?? const []),
         superLikedMe: json['super_liked_me'] ?? false,
         detailsLoaded: json['lean'] != true,
-      );
+      )..boostId = (json['boost_id'] as num?)?.toInt();
 
   // کارتِ سبکِ سرور عکس‌ها رو فقط به‌صورتِ آدرس (String) می‌فرسته؛ کارتِ کامل Map.
   static List<Photo> _photosFrom(dynamic raw) {

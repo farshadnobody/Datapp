@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../boost/boost_sheet.dart';
 import '../api_client.dart';
 import '../cache/card_resolver.dart';
 import '../models/match_models.dart';
@@ -411,6 +412,8 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
 
   void _onSwiped(DiscoveryCandidate c, SwipeDirection dir) {
     final direction = _dirName(dir);
+    // boost_id از آیتمِ صفِ همین تب (حتی اگه بوست تموم شده باشه، سرور هنوز می‌شمردش).
+    final boostId = _feed?.boostIdFor(c.publicId);
     _excluded.add(c.publicId);
     _feed?.markSeen(c.publicId);
     setState(() {
@@ -434,13 +437,15 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
     // رد: جوابِ فوری نمی‌خواد؛ تو صفِ ارسال می‌ره و همراهِ لایکِ بعدی (یا با تایمر) یکجا
     // فرستاده می‌شه. (Rewindِ یه ردِ هنوز-ارسال‌نشده هم هیچ درخواستی نمی‌خواد.)
     if (direction == 'pass') {
-      SwipeOutbox.instance.add(c.publicId);
+      SwipeOutbox.instance.add(c.publicId, boostId: boostId);
       return;
     }
     final pending = SwipeOutbox.instance.pendingForPiggyback();
+    final pendingBoosts = SwipeOutbox.instance.boostsFor(pending);
 
     RewindMemory.instance
-        .enqueue(() => ApiClient.swipe(c.publicId, direction, pendingPasses: pending))
+        .enqueue(() => ApiClient.swipe(c.publicId, direction,
+            pendingPasses: pending, boostId: boostId, pendingPassBoosts: pendingBoosts))
         .then((result) {
       SwipeOutbox.instance.confirmSent(pending);
       if (!result.changed && pushed) {
@@ -748,6 +753,9 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
       return;
     }
 
+    // فقط کارتی که تو استکِ همین صفحه بود (نه پروفایلِ بازشده از جست‌وجو) boost_id داره.
+    final boostId =
+        _stack.any((c) => c.publicId == candidate.publicId) ? _feed?.boostIdFor(candidate.publicId) : null;
     _excluded.add(candidate.publicId);
     _feed?.markSeen(candidate.publicId);
     setState(() {
@@ -765,13 +773,15 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
     }
     if (!pushed) return; // اکشنِ بی‌اثر → درخواستی لازم نیست.
     if (direction == 'pass') {
-      SwipeOutbox.instance.add(candidate.publicId);
+      SwipeOutbox.instance.add(candidate.publicId, boostId: boostId);
       return;
     }
     final pending = SwipeOutbox.instance.pendingForPiggyback();
+    final pendingBoosts = SwipeOutbox.instance.boostsFor(pending);
     try {
-      final result = await RewindMemory.instance.enqueue(
-          () => ApiClient.swipe(candidate.publicId, direction, pendingPasses: pending));
+      final result = await RewindMemory.instance.enqueue(() => ApiClient.swipe(
+          candidate.publicId, direction,
+          pendingPasses: pending, boostId: boostId, pendingPassBoosts: pendingBoosts));
       SwipeOutbox.instance.confirmSent(pending);
       if (!result.changed && pushed) {
         RewindMemory.instance.discardLatestFor(candidate.publicId);
@@ -1034,7 +1044,7 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
                     _reload();
                   },
                   onFilters: _openFilters,
-                  onBoost: () => _toast('Boost به‌زودی اضافه می‌شه.'),
+                  onBoost: () => showBoostSheet(context),
                 ),
               ),
       ),

@@ -14,6 +14,7 @@ import 'swipe/swipe_outbox.dart';
 import 'cache/card_cache.dart';
 import 'cache/discovery_queue.dart';
 import 'likes/likes_store.dart';
+import 'boost/boost_state.dart';
 
 // نگهدارنده‌ی session. مقدارها هم تو حافظه نگه داشته می‌شن (برای دسترسی
 // سریع و همزمان از ApiClient) و هم روی گوشی ذخیره می‌شن تا با بستن و باز کردن
@@ -116,6 +117,7 @@ class AuthSession {
     CardCache.instance.clear(); // کارت‌های کاربرِ قبلی (فقط تو logout کامل پاک می‌شه)
     DiscoveryQueueStore.instance.clearAll(); // صف‌های Swipe و Explore
     LikesStore.instance.clear(); // state لیستِ Likes
+    BoostState.instance.clear(); // موجودی/بوستِ حسابِ قبلی
     token = null;
     phone = null;
     hasProfile = false;

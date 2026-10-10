@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../api_client.dart';
 import '../auth_session.dart';
+import '../boost/boost_screen.dart';
+import '../boost/boost_state.dart';
 import '../models/profile_models.dart';
 import '../onboarding/onboarding_data.dart';
 import '../style/app_colors.dart';
@@ -64,6 +66,7 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
   @override
   void initState() {
     super.initState();
+    BoostState.instance.refresh(); // موجودیِ بوست برای ردیفِ آمار
     _load();
   }
 
@@ -1114,20 +1117,34 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
   }
 
   Widget _buildStatsRow() {
-    Widget stat(String label) => Expanded(
-          child: Column(children: [
-            const Text('۰', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 2),
-            Text(label, style: const TextStyle(color: AppDark.muted, fontSize: 11), textAlign: TextAlign.center),
-          ]),
+    Widget stat(String label, {String value = '۰', VoidCallback? onTap}) => Expanded(
+          child: InkWell(
+            onTap: onTap,
+            child: Column(children: [
+              Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 2),
+              Text(label, style: const TextStyle(color: AppDark.muted, fontSize: 11), textAlign: TextAlign.center),
+            ]),
+          ),
         );
+    String fa(int n) {
+      const d = '۰۱۲۳۴۵۶۷۸۹';
+      return '$n'.split('').map((c) => d[int.parse(c)]).join();
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(color: AppDark.card, borderRadius: BorderRadius.circular(14)),
-      child: Row(children: [
-        stat('بوست'),
-        stat('اشتراک'),
-      ]),
+      child: ListenableBuilder(
+        listenable: BoostState.instance,
+        builder: (context, _) => Row(children: [
+          // موجودیِ واقعیِ بوست؛ لمس → صفحه‌ی بوست.
+          stat('بوست',
+              value: fa(BoostState.instance.credits),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BoostScreen()))),
+          stat('اشتراک'),
+        ]),
+      ),
     );
   }
 }

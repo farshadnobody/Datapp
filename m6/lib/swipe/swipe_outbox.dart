@@ -20,11 +20,15 @@ class SwipeOutbox with WidgetsBindingObserver {
   static final SwipeOutbox instance = SwipeOutbox._();
 
   static const String _key = 'swipe_outbox_ids';
+  static const String _boostKey = 'swipe_outbox_boosts';
   static const int _flushAt = 20;
   static const int _piggybackMax = 50;
   static const Duration _interval = Duration(seconds: 60);
 
   final List<String> _ids = [];
+
+  /// public_id → boost_id برای ردهایی که از کارتِ بوست بودن (کنارِ خودِ ردِ صف، نه رو کارت).
+  final Map<String, int> _boosts = {};
   bool _flushing = false;
   int _failures = 0;
   Timer? _timer;
@@ -42,6 +46,10 @@ class SwipeOutbox with WidgetsBindingObserver {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_key);
       if (raw != null) _ids.addAll((jsonDecode(raw) as List).map((e) => '$e'));
+      final rawBoosts = prefs.getString(_boostKey);
+      if (rawBoosts != null) {
+        (jsonDecode(rawBoosts) as Map).forEach((k, v) => _boosts['$k'] = (v as num).toInt());
+      }
     } catch (_) {}
     WidgetsBinding.instance.addObserver(this);
     _sub = RealtimeService.instance.events.listen((e) {
@@ -50,8 +58,9 @@ class SwipeOutbox with WidgetsBindingObserver {
     if (_ids.isNotEmpty) _schedule();
   }
 
-  void add(String publicId) {
+  void add(String publicId, {int? boostId}) {
     if (!_ids.contains(publicId)) _ids.add(publicId);
+    if (boostId != null) _boosts[publicId] = boostId;
     _persist();
     if (_ids.length >= _flushAt) {
       flush();
@@ -63,6 +72,7 @@ class SwipeOutbox with WidgetsBindingObserver {
   /// Rewindِ یه ردی که هنوز تو صفه: فقط از صف برداشته می‌شه، هیچ درخواستی لازم نیست.
   bool removeIfQueued(String publicId) {
     final removed = _ids.remove(publicId);
+    _boosts.remove(publicId);
     if (removed) _persist();
     return removed;
   }
@@ -71,10 +81,17 @@ class SwipeOutbox with WidgetsBindingObserver {
   /// با [confirmSent] برداشته می‌شن).
   List<String> pendingForPiggyback() => _ids.take(_piggybackMax).toList();
 
+  /// boost_id ردهای [ids] (فقط اونایی که از بوست بودن) — همراهِ pending_passes می‌ره.
+  Map<String, int> boostsFor(Iterable<String> ids) =>
+      {for (final id in ids) if (_boosts[id] != null) id: _boosts[id]!};
+
   void confirmSent(List<String> sent) {
     if (sent.isEmpty) return;
     final set = sent.toSet();
     _ids.removeWhere(set.contains);
+    for (final id in set) {
+      _boosts.remove(id);
+    }
     _persist();
   }
 
@@ -95,7 +112,7 @@ class SwipeOutbox with WidgetsBindingObserver {
       while (_ids.isNotEmpty) {
         final chunk = _ids.take(100).toList();
         try {
-          await ApiClient.swipeBatch(chunk);
+          await ApiClient.swipeBatch(chunk, boostIds: boostsFor(chunk));
         } on ApiException catch (e) {
           // محدودیتِ نرخ: بعداً. هر خطای دیگه‌ی سرور (۴۰۰ و...) یعنی دوباره فرستادنش
           // فایده‌ای نداره؛ دور ریخته می‌شه تا صف برای همیشه گیر نکنه.
@@ -129,6 +146,7 @@ class SwipeOutbox with WidgetsBindingObserver {
       try {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_key, jsonEncode(_ids));
+        await prefs.setString(_boostKey, jsonEncode(_boosts));
       } catch (_) {}
     });
   }
@@ -136,12 +154,14 @@ class SwipeOutbox with WidgetsBindingObserver {
   /// موقعِ خروج از حساب: ردهای این حساب برای حسابِ بعدی نباید بمونن.
   Future<void> clearLocal() async {
     _ids.clear();
+    _boosts.clear();
     _timer?.cancel();
     _timer = null;
     _failures = 0;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_key);
+      await prefs.remove(_boostKey);
     } catch (_) {}
   }
 }
