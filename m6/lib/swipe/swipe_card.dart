@@ -774,12 +774,7 @@ class _SwipeProfileCardState extends State<SwipeProfileCard> with SingleTickerPr
     }
   }
 
-  static String? _labelOf(List<OptionItem> items, String id) {
-    for (final i in items) {
-      if (i.id == id) return i.label;
-    }
-    return null;
-  }
+  static String? _labelOf(List<OptionItem> items, String id) => optionLabel(items, id);
 
   static String? _pillLabel(String? status) {
     switch (status) {

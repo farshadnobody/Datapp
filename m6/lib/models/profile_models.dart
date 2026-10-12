@@ -10,10 +10,12 @@ class Option {
 class PromptOption {
   final String id;
   final String text;
-  PromptOption({required this.id, required this.text});
+  // ادمین مخفیش کرده: تو لیستِ انتخابِ پرامپت نشون داده نمی‌شه، ولی جواب‌های قبلی با متنش دیده می‌شن.
+  final bool hidden;
+  PromptOption({required this.id, required this.text, this.hidden = false});
 
   factory PromptOption.fromJson(Map<String, dynamic> json) =>
-      PromptOption(id: json['id'], text: json['text']);
+      PromptOption(id: json['id'], text: json['text'], hidden: json['hidden'] == true);
 }
 
 class ProfileLimits {

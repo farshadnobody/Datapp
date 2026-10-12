@@ -692,11 +692,12 @@ class ApiClient {
   }
 
   /// GET /api/bootstrap — «درخواستِ اولیه»: اشتراک + سهمیه‌ها + تعدادِ لایک‌ها + نسخه‌ها؛
-  /// تبلیغ‌ها/پلن‌ها/گزینه‌ها فقط وقتی میان که نسخه‌شون با نسخه‌ی اپ فرق داشته باشه.
+  /// تبلیغ‌ها/پلن‌ها/گزینه‌ها/دسته‌های اکسپلور فقط وقتی میان که نسخه‌شون با نسخه‌ی اپ فرق داشته باشه.
   static Future<Map<String, dynamic>> bootstrap({
     String? promosVersion,
     String? plansVersion,
     String? optionsVersion,
+    String? exploreVersion,
     bool likesCounts = false,
   }) async {
     final uri = Uri.parse('$backendBaseUrl/api/bootstrap').replace(queryParameters: {
@@ -704,6 +705,7 @@ class ApiClient {
       if (promosVersion != null) 'pv': promosVersion,
       if (plansVersion != null) 'plv': plansVersion,
       if (optionsVersion != null) 'ov': optionsVersion,
+      if (exploreVersion != null) 'ev': exploreVersion,
     });
     final response = await _getUri(uri, authenticated: true);
     if (response.statusCode != 200) {

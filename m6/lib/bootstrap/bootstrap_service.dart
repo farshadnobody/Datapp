@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api_client.dart';
+import '../explore/explore_data.dart';
+import '../onboarding/onboarding_data.dart';
 import '../promo/promo_models.dart';
 import '../promo/promo_service.dart';
 import '../realtime/realtime_service.dart';
@@ -80,7 +82,7 @@ class AppCounters extends ChangeNotifier {
 
 /// «درخواستِ اولیه»: به‌جای ۵ تا ۶ درخواستِ جدا، اپ یه درخواست (GET /api/bootstrap) می‌زنه.
 ///  - داده‌های زنده (اشتراک، سهمیه‌ها، تعدادِ لایک‌ها) همیشه میان.
-///  - داده‌های کم‌تغییر (تبلیغ‌ها، پلن‌ها، گزینه‌های پروفایل) فقط وقتی «نسخه»‌شون با
+///  - داده‌های کم‌تغییر (تبلیغ‌ها، پلن‌ها، گزینه‌های پروفایل، دسته‌های اکسپلور) فقط وقتی «نسخه»‌شون با
 ///    نسخه‌ی ذخیره‌شده‌ی اپ فرق داشته باشه میان؛ وگرنه همون نسخه‌ی روی گوشی استفاده می‌شه.
 ///
 /// دوباره‌صدا زدن: وقتی اپ باز می‌شه، از پس‌زمینه برمی‌گرده، WebSocket بعد از قطعی وصل
@@ -94,6 +96,7 @@ class BootstrapService {
   static const String _promosKey = 'bs_promos_json';
   static const String _plansKey = 'bs_plans_json';
   static const String optionsKey = 'bs_options_json';
+  static const String _exploreKey = 'bs_explore_json';
   static const Duration _minGap = Duration(seconds: 20);
 
   Map<String, String> _versions = {};
@@ -156,6 +159,17 @@ class BootstrapService {
             .toList();
         PromoService.instance.applyList(list, notify: false);
       }
+      // نامِ نمایشیِ گزینه‌ها و لیستِ دسته‌های اکسپلور که قبلاً از سرور گرفتیم (بدونِ هیچ درخواستی).
+      final optionsRaw = prefs.getString(optionsKey);
+      if (optionsRaw != null) {
+        final decoded = jsonDecode(optionsRaw);
+        if (decoded is Map<String, dynamic>) applyProfileOptionOverrides(decoded);
+      }
+      final exploreRaw = prefs.getString(_exploreKey);
+      if (exploreRaw != null) {
+        final decoded = jsonDecode(exploreRaw);
+        if (decoded is List) ExploreConfig.instance.apply(decoded);
+      }
     } catch (_) {}
     _loaded = true;
   }
@@ -177,6 +191,7 @@ class BootstrapService {
         promosVersion: _versions['promos'],
         plansVersion: _versions['plans'],
         optionsVersion: _versions['options'],
+        exploreVersion: _versions['explore'],
         // شمارنده‌ی لایک‌ها فقط وقتی خواسته می‌شه که از آخرین دریافتش یه ساعت گذشته باشه
         // (سرور برای اشتراکی‌ها هیچ‌وقت نمی‌فرستدش).
         likesCounts: AppCounters.instance.stale,
@@ -229,6 +244,12 @@ class BootstrapService {
     }
     if (json['options'] is Map) {
       await prefs.setString(optionsKey, jsonEncode(json['options']));
+      final opts = json['options'];
+      if (opts is Map<String, dynamic>) applyProfileOptionOverrides(opts);
+    }
+    if (json['explore'] is List) {
+      await prefs.setString(_exploreKey, jsonEncode(json['explore']));
+      ExploreConfig.instance.apply(json['explore'] as List);
     }
 
     // نسخه‌ها فقط بعد از اعمالِ موفق ذخیره می‌شن.
@@ -247,7 +268,7 @@ class BootstrapService {
     ConversationsStore.instance.clear();
     try {
       final prefs = await SharedPreferences.getInstance();
-      for (final k in [_versionsKey, _promosKey, _plansKey, optionsKey]) {
+      for (final k in [_versionsKey, _promosKey, _plansKey, optionsKey, _exploreKey]) {
         await prefs.remove(k);
       }
     } catch (_) {}

@@ -4,8 +4,7 @@ import '../explore/explore_category_screen.dart';
 import '../explore/explore_data.dart';
 
 /// تب «اکسپلور» — دقیقاً شبیهِ صفحه‌ی Explore تیندر: یه گریدِ دوستونه‌ی
-/// تخت از تایل‌های خاکستریِ تیره، هرکدوم یه ایموجیِ بزرگ، عنوان و عددِ
-/// نمایشی؛ با تپ روی هر تایل، استکِ سواپِ مخصوصِ همون دسته باز می‌شه.
+/// تخت از تایل‌های خاکستریِ تیره، هرکدوم یه ایموجیِ بزرگ و عنوان؛ با تپ روی هر تایل، استکِ سواپِ مخصوصِ همون دسته باز می‌شه.
 class ExploreScreen extends StatelessWidget {
   const ExploreScreen({super.key});
 
@@ -51,23 +50,31 @@ class ExploreScreen extends StatelessWidget {
                 ),
               ),
             ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-              sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 14,
-                  crossAxisSpacing: 14,
-                  childAspectRatio: 0.8,
-                ),
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) {
-                    final cat = kExploreCategories[i];
-                    return _ExploreTile(category: cat, onTap: () => _openCategory(context, cat));
-                  },
-                  childCount: kExploreCategories.length,
-                ),
-              ),
+            // لیستِ دسته‌ها از پنلِ ادمین میاد (ExploreConfig)؛ وقتی bootstrap نسخه‌ی جدید گرفت
+            // همین‌جا خودش دوباره ساخته می‌شه.
+            AnimatedBuilder(
+              animation: ExploreConfig.instance,
+              builder: (context, _) {
+                final cats = ExploreConfig.instance.categories;
+                return SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                  sliver: SliverGrid(
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 14,
+                      crossAxisSpacing: 14,
+                      childAspectRatio: 0.8,
+                    ),
+                    delegate: SliverChildBuilderDelegate(
+                      (context, i) {
+                        final cat = cats[i];
+                        return _ExploreTile(category: cat, onTap: () => _openCategory(context, cat));
+                      },
+                      childCount: cats.length,
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         ),
@@ -127,15 +134,6 @@ class _ExploreTile extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                         height: 1.25,
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${category.count}',
-                    style: const TextStyle(
-                      color: Color(0xFF8E8E93),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],

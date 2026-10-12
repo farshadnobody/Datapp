@@ -1,9 +1,10 @@
-// داده‌های ثابتِ سؤال‌های اونبوردینگ (سبک تیندر).
+// داده‌های سؤال‌های اونبوردینگ (سبک تیندر).
 //
-// این‌ها فعلاً هاردکدن، نه از بک‌اند. اگه می‌خوای شخصی‌سازی/کنترل از سمت
-// سرور داشته باشی (مثلاً بعداً یه گزینه اضافه/کم کنی بدون آپدیت اپ)، باید
-// این لیست‌ها رو هم به /api/profile/options اضافه کنی و اینجا فقط fallback
-// بمونه.
+// لیست‌های «_kDefault…» پیش‌فرضِ داخلِ اپن (وقتی هنوز چیزی از سرور نرسیده یا آفلاینی).
+// لیست‌هایی که صفحه‌ها می‌خونن (kGenderOptions، kLookingForOptions و ...) متغیرن: وقتی
+// bootstrap «گزینه‌های پروفایل» رو از سرور گرفت (فقط اگه نسخه‌اش عوض شده باشه)،
+// [applyProfileOptionOverrides] نامِ نمایشی/توضیح رو با تغییرهای پنلِ ادمین جایگزین می‌کنه و
+// گزینه‌های «مخفی» رو از لیستِ انتخاب برمی‌داره. شناسه‌ها هیچ‌وقت عوض نمی‌شن.
 
 class OptionItem {
   final String id;
@@ -22,19 +23,19 @@ class OptionCategory {
 // تو مرحله‌ی «به چی علاقه داری»، هر دسته اول فقط همین تعداد تگ اول رو نشون
 // می‌ده و بقیه پشت دکمه‌ی «نمایش بیشتر» قایم می‌شن (دقیقاً رفتار تیندر).
 // برای اضافه کردن تگ‌های بیشتر (هم برای حالت جمع‌شده، هم برای حالت باز)،
-// کافیه به لیست items همون دسته‌ی موردنظر تو kInterestCategories زیر
+// کافیه به لیست items همون دسته‌ی موردنظر تو _kDefaultInterestCategories زیر
 // OptionItem جدید اضافه کنی — پنج‌تای اول خودکار می‌شن حالت جمع‌شده.
 const int kInterestPreviewCount = 5;
 
 // مرحله‌ی جنسیت
-const List<OptionItem> kGenderOptions = [
+const List<OptionItem> _kDefaultGenderOptions = [
   OptionItem('man', 'مرد'),
   OptionItem('woman', 'زن'),
   OptionItem('beyond_binary', 'فراتر از دوجنسیتی'),
 ];
 
 // مرحله‌ی گرایش جنسی
-const List<OptionItem> kOrientationOptions = [
+const List<OptionItem> _kDefaultOrientationOptions = [
   OptionItem('straight', 'استریت', 'کسی که فقط به جنس مخالف جذب می‌شه'),
   OptionItem('gay', 'گی', 'کسی که به هم‌جنس خودش جذب می‌شه'),
   OptionItem('lesbian', 'لزبین', 'زنی که از نظر عاطفی/جنسی به زن دیگه جذب می‌شه'),
@@ -48,7 +49,7 @@ const List<OptionItem> kOrientationOptions = [
 ];
 
 // مرحله‌ی «به دنبال دیدن چه کسانی هستی»
-const List<OptionItem> kSeeingOptions = [
+const List<OptionItem> _kDefaultSeeingOptions = [
   OptionItem('men', 'مردها'),
   OptionItem('women', 'زن‌ها'),
   OptionItem('beyond_binary', 'فراتر از دوجنسیتی'),
@@ -56,7 +57,7 @@ const List<OptionItem> kSeeingOptions = [
 ];
 
 // مرحله‌ی «دنبال چه نوع رابطه‌ای هستی»
-const List<OptionItem> kLookingForOptions = [
+const List<OptionItem> _kDefaultLookingForOptions = [
   OptionItem('long_term', 'رابطه‌ی جدی'),
   OptionItem('long_term_open_short', 'جدی، ولی به کوتاه‌مدت هم باز'),
   OptionItem('short_term_open_long', 'کوتاه‌مدت، ولی به جدی هم باز'),
@@ -66,7 +67,7 @@ const List<OptionItem> kLookingForOptions = [
 ];
 
 // مرحله‌ی تحصیلات
-const List<OptionItem> kEducationOptions = [
+const List<OptionItem> _kDefaultEducationOptions = [
   OptionItem('high_school', 'دیپلم'),
   OptionItem('in_college', 'دانشجوی کارشناسی'),
   OptionItem('bachelors', 'کارشناسی'),
@@ -78,7 +79,7 @@ const List<OptionItem> kEducationOptions = [
 ];
 
 // مرحله‌ی سبک زندگی — هر دسته تک‌انتخابیه
-const List<OptionCategory> kLifestyleCategories = [
+const List<OptionCategory> _kDefaultLifestyleCategories = [
   OptionCategory('drinking', 'چقدر مشروب می‌خوری؟', [
     OptionItem('not_for_me', 'اصلاً'),
     OptionItem('sober', 'ترک کردم'),
@@ -129,7 +130,7 @@ const List<OptionCategory> kLifestyleCategories = [
 
 // مرحله‌ی «بچه می‌خوای؟» — تو باتم‌شیت «Basics» صفحه‌ی پروفایل کنار برج و
 // تحصیلات و سبک ارتباطی میاد. تو فلوی اونبوردینگ فعلاً پرسیده نمی‌شه.
-const List<OptionItem> kWantChildrenOptions = [
+const List<OptionItem> _kDefaultWantChildrenOptions = [
   OptionItem('want_children', 'بچه می‌خوام'),
   OptionItem('dont_want_children', 'بچه نمی‌خوام'),
   OptionItem('have_and_want_more', 'دارم و بازم می‌خوام'),
@@ -144,11 +145,91 @@ String? optionLabel(List<OptionItem> items, String? id) {
   for (final i in items) {
     if (i.id == id) return i.label;
   }
-  return null;
+  // گزینه‌ای که ادمین مخفی کرده تو لیستِ انتخاب نیست، ولی مقدارِ قبلاً ذخیره‌شده‌ی کاربرها
+  // باید همچنان با نامش نشون داده بشه.
+  return _hiddenOptionLabels[id];
+}
+
+/// id → نامِ نمایشیِ گزینه‌های مخفی‌شده (فقط برای نمایشِ مقدارهای ذخیره‌شده).
+final Map<String, String> _hiddenOptionLabels = {};
+
+// لیست‌هایی که صفحه‌ها می‌خونن؛ پیش‌فرض همون لیستِ داخلِ اپ.
+List<OptionItem> kGenderOptions = _kDefaultGenderOptions;
+List<OptionItem> kOrientationOptions = _kDefaultOrientationOptions;
+List<OptionItem> kSeeingOptions = _kDefaultSeeingOptions;
+List<OptionItem> kLookingForOptions = _kDefaultLookingForOptions;
+List<OptionItem> kEducationOptions = _kDefaultEducationOptions;
+List<OptionItem> kWantChildrenOptions = _kDefaultWantChildrenOptions;
+List<OptionCategory> kLifestyleCategories = _kDefaultLifestyleCategories;
+List<OptionCategory> kAboutYouCategories = _kDefaultAboutYouCategories;
+List<OptionCategory> kInterestCategories = _kDefaultInterestCategories;
+
+String? _nonEmptyString(dynamic v) => v is String && v.isNotEmpty ? v : null;
+
+/// [json] همون جوابِ «options» از bootstrap (یا /api/profile/options)ـه. لیست‌های سرور (نام،
+/// توضیح، گزینه‌های جدید/حذف‌شده، ترتیب) جایگزینِ لیست‌های پیش‌فرضِ اپ می‌شن و گزینه‌های
+/// `hidden: true` از لیستِ انتخاب کنار می‌رن. هر خطایی بیاد، لیست‌های قبلی دست‌نخورده می‌مونن.
+void applyProfileOptionOverrides(Map<String, dynamic> json) {
+  try {
+    final hidden = <String, String>{};
+
+    // لیستِ سرور مرجعه: گزینه‌های جدیدِ ادمین اضافه می‌شن، حذف‌شده‌ها نیستن، مخفی‌ها از لیستِ
+    // انتخاب کنار می‌رن و ترتیب همونیه که سرور فرستاده. لیستِ پیش‌فرضِ اپ فقط وقتی استفاده
+    // می‌شه که از سرور چیزی نرسیده باشه.
+    List<OptionItem> mergeItems(List<OptionItem> base, dynamic serverList) {
+      if (serverList is! List || serverList.isEmpty) return base;
+      final out = <OptionItem>[];
+      for (final e in serverList) {
+        if (e is! Map) continue;
+        final id = e['id'];
+        final label = _nonEmptyString(e['label']);
+        if (id is! String || label == null) continue;
+        if (e['hidden'] == true) {
+          hidden.putIfAbsent(id, () => label);
+          continue;
+        }
+        out.add(OptionItem(id, label, _nonEmptyString(e['description'])));
+      }
+      return out.isEmpty ? base : out;
+    }
+
+    List<OptionCategory> mergeCats(List<OptionCategory> base, dynamic serverList) {
+      if (serverList is! List || serverList.isEmpty) return base;
+      final baseById = {for (final c in base) c.id: c};
+      final out = <OptionCategory>[];
+      for (final e in serverList) {
+        if (e is! Map) continue;
+        final id = e['id'];
+        if (id is! String) continue;
+        final b = baseById[id];
+        out.add(OptionCategory(
+          id,
+          _nonEmptyString(e['title']) ?? b?.title ?? id,
+          mergeItems(b?.items ?? const <OptionItem>[], e['items']),
+        ));
+      }
+      return out.isEmpty ? base : out;
+    }
+
+    kGenderOptions = mergeItems(_kDefaultGenderOptions, json['genders']);
+    kSeeingOptions = mergeItems(_kDefaultSeeingOptions, json['interested_in']);
+    kOrientationOptions = mergeItems(_kDefaultOrientationOptions, json['orientations']);
+    kLookingForOptions = mergeItems(_kDefaultLookingForOptions, json['looking_for_options']);
+    kEducationOptions = mergeItems(_kDefaultEducationOptions, json['education_options']);
+    kWantChildrenOptions = mergeItems(_kDefaultWantChildrenOptions, json['want_children_options']);
+    kLifestyleCategories = mergeCats(_kDefaultLifestyleCategories, json['lifestyle_categories']);
+    kAboutYouCategories = mergeCats(_kDefaultAboutYouCategories, json['about_you_categories']);
+    kInterestCategories = mergeCats(_kDefaultInterestCategories, json['interest_categories']);
+    _hiddenOptionLabels
+      ..clear()
+      ..addAll(hidden);
+  } catch (_) {
+    // دیتای خراب: همون لیست‌های قبلی می‌مونن.
+  }
 }
 
 // مرحله‌ی «چی تو رو، تو می‌کنه» — هر دسته تک‌انتخابیه
-const List<OptionCategory> kAboutYouCategories = [
+const List<OptionCategory> _kDefaultAboutYouCategories = [
   OptionCategory('communication', 'سبک ارتباطیت چیه؟', [
     OptionItem('big_texter', 'اهل پیام دادنم'),
     OptionItem('phone_caller', 'ترجیح می‌دم زنگ بزنم'),
@@ -180,7 +261,7 @@ const List<OptionCategory> kAboutYouCategories = [
 ];
 
 // مرحله‌ی علاقه‌مندی‌ها — دسته‌بندی‌شده، چندانتخابی (حداکثر تو کد کنترل می‌شه)
-const List<OptionCategory> kInterestCategories = [
+const List<OptionCategory> _kDefaultInterestCategories = [
   OptionCategory('creativity', 'خلاقیت', [
     OptionItem('photography', 'عکاسی'),
     OptionItem('painting', 'نقاشی'),

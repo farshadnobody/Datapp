@@ -8,9 +8,10 @@
 // IDها رو به شرطِ SQL تبدیل می‌کنه. هیچ فیلترِ سمتِ کلاینتی وجود نداره؛ [kind] و
 // [values] فقط توصیفِ دسته‌ان و منبعِ حقیقتِ IDها این فایله.
 //
-// عددهایی که کنارِ هر عنوان می‌بینی («count») فقط برای همون حسِ بصریِ
-// تیندره (اونم اینجا واقعی نیست، یه تخمینِ سمتِ سرور از تعدادِ پروفایل‌هاست)؛
-// اینجا چون همچین آماری از بک‌اند نمی‌گیریم، عددها ثابتن و صرفاً ظاهری‌ان.
+// تعدادِ آدم‌ها دیگه هیچ‌جا نشون داده نمی‌شه. لیستِ «نمایشی‌ها»، عنوان، ایموجی و ترتیبِ
+// دسته‌ها از پنلِ ادمین میاد (bootstrap، کلیدِ `explore`) و روی گوشی ذخیره می‌شه؛ فقط
+// وقتی نسخه‌اش عوض شده باشه دوباره گرفته می‌شه. تا وقتی چیزی نرسیده، همین لیستِ پیش‌فرضِ
+// داخلِ اپ ([kDefaultExploreCategories]) نشون داده می‌شه.
 
 import 'package:flutter/material.dart';
 
@@ -23,7 +24,6 @@ class ExploreCategory {
   final String imageAsset; // مسیرِ فایلِ گرافیکِ سه‌بعدی (assets/explore_icons/<id>.png)
   final IconData icon; // آیکونِ کوچیک تو هدرِ صفحه‌ی دسته و حالتِ خالی
   final List<Color> gradient; // فقط برای همون دایره‌ی کوچیکِ هدر
-  final int count; // عددِ نمایشیِ کنارِ عنوان
   final ExploreKind kind;
 
   /// برای kind == interest: زیرمجموعه‌ی تگ‌های این دسته (c.interests باید
@@ -43,16 +43,69 @@ class ExploreCategory {
     required this.imageAsset,
     required this.icon,
     required this.gradient,
-    required this.count,
     required this.kind,
     this.values = const {},
     this.lifestyleKey,
   });
+
+  /// فقط عنوان و ایموجی از سرور عوض می‌شن؛ بقیه (تصویر، آیکون، گرادیان) همون پیش‌فرضِ اپ.
+  ExploreCategory copyWith({String? title, String? emoji}) => ExploreCategory(
+        id: id,
+        title: title ?? this.title,
+        emoji: emoji ?? this.emoji,
+        imageAsset: imageAsset,
+        icon: icon,
+        gradient: gradient,
+        kind: kind,
+        values: values,
+        lifestyleKey: lifestyleKey,
+      );
+}
+
+/// لیستِ دسته‌های اکسپلور که الان باید نشون داده بشه. از bootstrap (کلیدِ `explore`) پر می‌شه.
+/// دسته‌ی جدیدی که ادمین ساخته و تو اپ تصویرِ سه‌بعدی نداره با ایموجی نشون داده می‌شه
+/// (ExploreScreen برای نبودنِ فایلِ تصویر از قبل errorBuilder داره).
+class ExploreConfig extends ChangeNotifier {
+  ExploreConfig._();
+  static final ExploreConfig instance = ExploreConfig._();
+
+  List<ExploreCategory> _categories = kDefaultExploreCategories;
+  List<ExploreCategory> get categories => _categories;
+
+  /// [list] همون json['explore'] از bootstrapه: [{id, title, emoji}, ...] فقط دسته‌های
+  /// نمایشی و به ترتیب. لیستِ خالی یعنی «همه مخفی‌ان».
+  void apply(List<dynamic> list) {
+    final byId = {for (final c in kDefaultExploreCategories) c.id: c};
+    final out = <ExploreCategory>[];
+    for (final e in list) {
+      if (e is! Map) continue;
+      final id = e['id'];
+      if (id is! String || id.isEmpty) continue;
+      final title = e['title'] is String && (e['title'] as String).isNotEmpty ? e['title'] as String : null;
+      final emoji = e['emoji'] is String && (e['emoji'] as String).isNotEmpty ? e['emoji'] as String : null;
+      final base = byId[id];
+      if (base != null) {
+        out.add(base.copyWith(title: title, emoji: emoji));
+      } else {
+        out.add(ExploreCategory(
+          id: id,
+          title: title ?? id,
+          emoji: emoji ?? '✨',
+          imageAsset: 'assets/explore_icons/$id.png',
+          icon: Icons.explore_outlined,
+          gradient: const [Color(0xFF6C63FF), Color(0xFF3F3D9E)],
+          kind: ExploreKind.interest, // فقط توصیفیه؛ فیلتر سمتِ سروره
+        ));
+      }
+    }
+    _categories = out;
+    notifyListeners();
+  }
 }
 
 /// «دسته‌های اکسپلور» — یه گریدِ تخت و پیوسته، دقیقاً به همون ترتیبی که تویِ
 /// اسکرین‌شات‌های Explore تیندر دیده می‌شه.
-final List<ExploreCategory> kExploreCategories = [
+const List<ExploreCategory> kDefaultExploreCategories = [
   const ExploreCategory(
     id: 'gamers',
     title: 'گیمرها',
@@ -60,7 +113,6 @@ final List<ExploreCategory> kExploreCategories = [
     imageAsset: 'assets/explore_icons/gamers.png',
     icon: Icons.sports_esports_outlined,
     gradient: [Color(0xFF9C4DCC), Color(0xFF5E3B9C)],
-    count: 15,
     kind: ExploreKind.interest,
     values: {'gaming'},
   ),
@@ -71,7 +123,6 @@ final List<ExploreCategory> kExploreCategories = [
     imageAsset: 'assets/explore_icons/foodies.png',
     icon: Icons.restaurant_outlined,
     gradient: [Color(0xFFFFC629), Color(0xFFCC8A00)],
-    count: 37,
     kind: ExploreKind.interest,
     values: {'foodie'},
   ),
@@ -82,7 +133,6 @@ final List<ExploreCategory> kExploreCategories = [
     imageAsset: 'assets/explore_icons/self_care.png',
     icon: Icons.spa_outlined,
     gradient: [Color(0xFF9AB9EA), Color(0xFF3D5C8A)],
-    count: 61,
     kind: ExploreKind.interest,
     values: {'self_care'},
   ),
@@ -93,7 +143,6 @@ final List<ExploreCategory> kExploreCategories = [
     imageAsset: 'assets/explore_icons/long_term.png',
     icon: Icons.favorite,
     gradient: [Color(0xFFE9190C), Color(0xFFFF6B6B)],
-    count: 94,
     kind: ExploreKind.intent,
     values: {'long_term'},
   ),
@@ -104,7 +153,6 @@ final List<ExploreCategory> kExploreCategories = [
     imageAsset: 'assets/explore_icons/serious_commitment.png',
     icon: Icons.favorite,
     gradient: [Color(0xFFCE130A), Color(0xFFF4907F)],
-    count: 32,
     kind: ExploreKind.intent,
     values: {'long_term_open_short'},
   ),
@@ -115,7 +163,6 @@ final List<ExploreCategory> kExploreCategories = [
     imageAsset: 'assets/explore_icons/short_term_fun.png',
     icon: Icons.bolt,
     gradient: [Color(0xFF9AB9EA), Color(0xFF3D9CF0)],
-    count: 57,
     kind: ExploreKind.intent,
     values: {'short_term_fun'},
   ),
@@ -126,7 +173,6 @@ final List<ExploreCategory> kExploreCategories = [
     imageAsset: 'assets/explore_icons/new_friends.png',
     icon: Icons.people_alt_outlined,
     gradient: [Color(0xFF3AA25C), Color(0xFF8CE0A6)],
-    count: 63,
     kind: ExploreKind.intent,
     values: {'new_friends'},
   ),
@@ -137,7 +183,6 @@ final List<ExploreCategory> kExploreCategories = [
     imageAsset: 'assets/explore_icons/wants_kids.png',
     icon: Icons.child_care_outlined,
     gradient: [Color(0xFFE9190C), Color(0xFFFF6B6B)],
-    count: 3,
     kind: ExploreKind.wantChildren,
     values: {'want_children', 'have_and_want_more'},
   ),
@@ -148,7 +193,6 @@ final List<ExploreCategory> kExploreCategories = [
     imageAsset: 'assets/explore_icons/travel.png',
     icon: Icons.flight_outlined,
     gradient: [Color(0xFFF4B0EC), Color(0xFFB57BE0)],
-    count: 48,
     kind: ExploreKind.interest,
     values: {'travel', 'road_trips'},
   ),
@@ -159,7 +203,6 @@ final List<ExploreCategory> kExploreCategories = [
     imageAsset: 'assets/explore_icons/binge_watchers.png',
     icon: Icons.tv_outlined,
     gradient: [Color(0xFFF4B0EC), Color(0xFFB57BE0)],
-    count: 27,
     kind: ExploreKind.interest,
     values: {'binge_watching'},
   ),
@@ -170,7 +213,6 @@ final List<ExploreCategory> kExploreCategories = [
     imageAsset: 'assets/explore_icons/sporty.png',
     icon: Icons.fitness_center,
     gradient: [Color(0xFFE9190C), Color(0xFF8C0C05)],
-    count: 31,
     kind: ExploreKind.interest,
     values: {
       'gym', 'running', 'football', 'swimming', 'yoga',
@@ -184,7 +226,6 @@ final List<ExploreCategory> kExploreCategories = [
     imageAsset: 'assets/explore_icons/coffee_date.png',
     icon: Icons.local_cafe_outlined,
     gradient: [Color(0xFFB08968), Color(0xFF6F4E37)],
-    count: 52,
     kind: ExploreKind.interest,
     values: {'coffee'},
   ),
@@ -195,7 +236,6 @@ final List<ExploreCategory> kExploreCategories = [
     imageAsset: 'assets/explore_icons/date_night.png',
     icon: Icons.wine_bar_outlined,
     gradient: [Color(0xFF9C4DCC), Color(0xFF5E3B9C)],
-    count: 21,
     kind: ExploreKind.interest,
     values: {'cafe_hopping', 'cinema', 'live_music', 'theater'},
   ),
@@ -206,7 +246,6 @@ final List<ExploreCategory> kExploreCategories = [
     imageAsset: 'assets/explore_icons/thrill_seekers.png',
     icon: Icons.rocket_launch_outlined,
     gradient: [Color(0xFFF4A11F), Color(0xFFFFD36B)],
-    count: 23,
     kind: ExploreKind.interest,
     values: {'climbing', 'hiking', 'cycling', 'road_trips'},
   ),
@@ -217,7 +256,6 @@ final List<ExploreCategory> kExploreCategories = [
     imageAsset: 'assets/explore_icons/creatives.png',
     icon: Icons.palette_outlined,
     gradient: [Color(0xFFF4B0EC), Color(0xFFB57BE0)],
-    count: 63,
     kind: ExploreKind.interest,
     values: {
       'photography', 'painting', 'writing', 'dancing',
@@ -231,7 +269,6 @@ final List<ExploreCategory> kExploreCategories = [
     imageAsset: 'assets/explore_icons/nature_lovers.png',
     icon: Icons.eco_outlined,
     gradient: [Color(0xFF3AA25C), Color(0xFF1F5C33)],
-    count: 42,
     kind: ExploreKind.interest,
     values: {'hiking', 'camping', 'beach', 'nature'},
   ),
@@ -242,7 +279,6 @@ final List<ExploreCategory> kExploreCategories = [
     imageAsset: 'assets/explore_icons/animal_parents.png',
     icon: Icons.pets,
     gradient: [Color(0xFFB08968), Color(0xFF6F4E37)],
-    count: 4,
     kind: ExploreKind.lifestyle,
     lifestyleKey: 'pets',
     values: {

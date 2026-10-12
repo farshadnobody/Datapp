@@ -355,7 +355,7 @@ class _ProfileHomeScreenState extends State<ProfileHomeScreen> {
   }
 
   List<OptionItem> get _promptChoices => (_options?.prompts.isNotEmpty ?? false)
-      ? _options!.prompts.map((p) => OptionItem(p.id, p.text)).toList()
+      ? _options!.prompts.where((p) => !p.hidden).map((p) => OptionItem(p.id, p.text)).toList()
       : kFallbackPrompts;
 
   Future<void> _addOrEditPrompt([PromptAnswer? existing]) async {
