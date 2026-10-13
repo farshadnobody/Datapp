@@ -64,9 +64,13 @@ class MyApp extends StatelessWidget {
 
   Widget _initialScreen() {
     if (!AuthSession.isLoggedIn) return const StartScreen();
-    return AuthSession.hasProfile
-        ? const HomeScreen()
-        : const OnboardingWelcomeScreen();
+    // کاربر لاگین‌شده: انیمیشن لوگو تا مرحله‌ی قرمز شدن اجرا می‌شه و بعد
+    // مستقیم می‌ره صفحه‌ی بعدی (دکمه‌های لاگین نشون داده نمی‌شن).
+    return StartScreen(
+      afterIntro: AuthSession.hasProfile
+          ? const HomeScreen()
+          : const OnboardingWelcomeScreen(),
+    );
   }
 
   @override
