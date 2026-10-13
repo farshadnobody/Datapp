@@ -44,6 +44,7 @@ class RealtimeService with WidgetsBindingObserver {
   bool _everConnected = false;
   int _attempt = 0;
   int _generation = 0; // برای نادیده گرفتنِ callbackهای یه اتصالِ قدیمی
+  DateTime? _downSince; // از کِی وصل نیستیم (برای «قطعیِ کوتاه یا طولانی؟»)
 
   /// بعد از لاگین/باز شدنِ اپ صدا زده می‌شه.
   void start() {
@@ -56,10 +57,24 @@ class RealtimeService with WidgetsBindingObserver {
     if (_channel == null && _foreground) _connect();
   }
 
+  /// یه پیامِ کوچیک (JSON) از اپ به سرور رو همین اتصال می‌فرسته. false یعنی الان وصل
+  /// نیستیم (یا نوشتن شکست خورد) و صدا زننده باید از HTTP استفاده کنه.
+  bool send(Map<String, dynamic> message) {
+    final ch = _channel;
+    if (ch == null || !connected.value) return false;
+    try {
+      ch.sink.add(jsonEncode(message));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// موقعِ خروج از حساب.
   void stop() {
     _wanted = false;
     _everConnected = false;
+    _downSince = null;
     _teardown();
   }
 
@@ -87,7 +102,10 @@ class RealtimeService with WidgetsBindingObserver {
       _channel?.sink.close();
     } catch (_) {}
     _channel = null;
-    if (connected.value) connected.value = false;
+    if (connected.value) {
+      connected.value = false;
+      _downSince ??= DateTime.now();
+    }
   }
 
   void _connect() {
@@ -107,11 +125,16 @@ class RealtimeService with WidgetsBindingObserver {
         if (gen != _generation) return;
         _attempt = 0;
         final reconnect = _everConnected;
+        final downSince = _downSince;
+        _downSince = null;
         _everConnected = true;
         connected.value = true;
         // «connected» برای صفحه‌هاست تا بعد از یه قطعیِ طولانی، چیزی که از دست رفته رو
         // دوباره بگیرن (bootstrap، پیام‌های جدید...).
-        _events.add(RealtimeEvent('connected', {'reconnect': reconnect}));
+        // down_ms: چند میلی‌ثانیه وصل نبودیم (فقط برای تصمیمِ «bootstrap لازمه؟»؛ چت و
+        // لیستِ چت‌ها همیشه بعد از هر وصلِ دوباره هم‌گام می‌شن چون سرور رویداد رو صف نمی‌کنه).
+        final downMs = downSince == null ? 0 : DateTime.now().difference(downSince).inMilliseconds;
+        _events.add(RealtimeEvent('connected', {'reconnect': reconnect, 'down_ms': downMs}));
       }).catchError((_) {
         if (gen == _generation) _scheduleRetry();
       });
@@ -161,6 +184,9 @@ class RealtimeService with WidgetsBindingObserver {
       _channel?.sink.close();
     } catch (_) {}
     _channel = null;
-    if (connected.value) connected.value = false;
+    if (connected.value) {
+      connected.value = false;
+      _downSince ??= DateTime.now();
+    }
   }
 }

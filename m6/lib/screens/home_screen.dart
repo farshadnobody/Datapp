@@ -35,6 +35,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   static const int _swipeTab = 0;
+  static const int _exploreTab = 1;
   static const int _likesTab = 2;
   static const int _chatTab = 3;
   static const List<String> _screenKeys = ['swipe', 'explore', 'likes', 'chat', 'profile'];
@@ -56,8 +57,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     RealtimeService.instance.start();
     BootstrapService.instance.markColdStart();
     BootstrapService.instance.refresh(force: true);
-    // لیستِ چت‌ها: یه بار موقعِ باز شدنِ اپ (تا اون لحظه از فایلِ ذخیره‌شده)، بعدش فقط با
-    // رویدادهای سرور عوض می‌شه.
+    // لیستِ چت‌ها: از فایلِ ذخیره‌شده بالا میاد؛ از سرور فقط موقعِ ورود به تبِ چت (اگه
+    // کثیف باشه) گرفته می‌شه، بینِ ورودها با رویدادهای سرور عوض می‌شه.
     ConversationsStore.instance.start();
     SubscriptionState.instance.addListener(_onSubscriptionChanged);
     AppCounters.instance.addListener(_onCountersChanged);
@@ -125,16 +126,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _select(int i) {
     if (i == _index) return;
     HapticFeedback.selectionClick();
+    if (_index == _chatTab) ConversationsStore.instance.onLeaveTab();
     // از سواپ/اکسپلور رفتیم بیرون: ردهای جمع‌شده رو بفرست.
     if (_index <= 1 && i > 1) SwipeOutbox.instance.flush();
     setState(() {
       _index = i;
       _visited.add(i);
       if (i == _swipeTab) _swipeEnters.value++;
-      // اتصالِ زنده نداریم: به‌روزرسانیِ رویدادها ممکنه از دست رفته باشه، پس یه بار از سرور.
-      if (i == _chatTab && !RealtimeService.instance.connected.value) {
-        ConversationsStore.instance.refresh();
-      }
+      // لیستِ چت‌ها: فقط اگه کثیفه (یا اتصالِ زنده نداریم) از سرور گرفته می‌شه.
+      if (i == _chatTab) ConversationsStore.instance.onEnterTab();
+      // اکسپلور: نسخه‌ی ذخیره‌شده رو بفرست؛ فقط اگه عوض شده لیستِ جدید میاد.
+      if (i == _exploreTab) BootstrapService.instance.refreshExplore();
       if (i == _likesTab) {
         if (_likesDirty) {
           _likesRefresh++; // مثلاً اشتراک عوض شده: قفل/بازِ لیست

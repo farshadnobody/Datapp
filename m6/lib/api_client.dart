@@ -697,7 +697,6 @@ class ApiClient {
     String? promosVersion,
     String? plansVersion,
     String? optionsVersion,
-    String? exploreVersion,
     bool likesCounts = false,
   }) async {
     final uri = Uri.parse('$backendBaseUrl/api/bootstrap').replace(queryParameters: {
@@ -705,11 +704,23 @@ class ApiClient {
       if (promosVersion != null) 'pv': promosVersion,
       if (plansVersion != null) 'plv': plansVersion,
       if (optionsVersion != null) 'ov': optionsVersion,
-      if (exploreVersion != null) 'ev': exploreVersion,
     });
     final response = await _getUri(uri, authenticated: true);
     if (response.statusCode != 200) {
       throw ApiException('bootstrap_unavailable');
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  /// GET /api/explore-config — فقط موقعِ ورود به تبِ اکسپلور. جواب همیشه {version} داره؛
+  /// {explore: [...]} فقط وقتی میاد که نسخه‌ی [version] با سرور فرق داشته باشه.
+  static Future<Map<String, dynamic>> exploreConfig({String? version}) async {
+    final uri = Uri.parse('$backendBaseUrl/api/explore-config').replace(queryParameters: {
+      if (version != null) 'ev': version,
+    });
+    final response = await _getUri(uri, authenticated: true);
+    if (response.statusCode != 200) {
+      throw ApiException('explore_config_unavailable');
     }
     return jsonDecode(response.body) as Map<String, dynamic>;
   }

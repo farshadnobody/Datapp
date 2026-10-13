@@ -10,9 +10,10 @@ import '../models/match_models.dart';
 import '../realtime/realtime_service.dart';
 
 /// لیستِ چت‌ها روی گوشی. مستقل از صفحه‌ی چت‌ها زنده‌ست:
-///  - یه بار موقعِ باز شدنِ اپ از سرور گرفته می‌شه (و تا اون لحظه از فایلِ ذخیره‌شده نشون
-///    داده می‌شه)؛
-///  - بعدش فقط با «رویدادهای سرور» عوض می‌شه (پیامِ جدید، متچ، آنمتچ، پاک‌شدنِ گفتگو) —
+///  - تا اولین ورود به تبِ چت از فایلِ ذخیره‌شده نشون داده می‌شه؛ از سرور فقط وقتی
+///    گرفته می‌شه که کاربر وارد تبِ چت بشه و لیست «کثیف» باشه (هنوز نگرفتیم، بعد از
+///    وصلِ دوباره‌ی وب‌سوکت، متچ/گفتگوی ناشناخته، یا وب‌سوکت وصل نیست)؛
+///  - بینِ ورودها با «رویدادهای سرور» عوض می‌شه (پیامِ جدید، آنمتچ، پاک‌شدنِ گفتگو) —
 ///    اپ مرتب نمی‌پرسه «چیزی عوض شده؟».
 class ConversationsStore extends ChangeNotifier {
   ConversationsStore._();
@@ -24,6 +25,14 @@ class ConversationsStore extends ChangeNotifier {
 
   bool _started = false;
   bool _refreshing = false;
+
+  /// «کثیف» یعنی ممکنه لیستِ گوشی با سرور فرق داشته باشه؛ با اولین ورود به تبِ چت (یا هر
+  /// ورودِ بعدی که کثیف باشه) از سرور گرفته می‌شه.
+  bool _dirty = true;
+
+  /// تبِ چت الان جلوی کاربره؟ (HomeScreen تنظیمش می‌کنه.) اگه باشه و لیست کثیف شد، همون
+  /// لحظه refresh می‌شه؛ وگرنه تا ورودِ بعدی صبر می‌کنه.
+  bool visible = false;
   StreamSubscription? _sub;
   Timer? _saveTimer;
 
@@ -37,7 +46,21 @@ class ConversationsStore extends ChangeNotifier {
       notifyListeners();
     }
     _sub = RealtimeService.instance.events.listen(_onEvent);
-    await refresh();
+    // هیچ درخواستی موقعِ باز شدنِ اپ نمی‌زنیم؛ لیست با ورود به تبِ چت گرفته می‌شه.
+  }
+
+  /// کاربر وارد تبِ چت شد (HomeScreen._select). فقط اگه لازمه از سرور می‌گیره: لیست کثیفه
+  /// یا وب‌سوکت وصل نیست (پس ممکنه رویدادها از دست رفته باشن).
+  void onEnterTab() {
+    visible = true;
+    if (_dirty || !RealtimeService.instance.connected.value) refresh();
+  }
+
+  void onLeaveTab() => visible = false;
+
+  void _markDirty() {
+    _dirty = true;
+    if (visible) refresh();
   }
 
   Future<File> _file() async {
@@ -66,7 +89,7 @@ class ConversationsStore extends ChangeNotifier {
     });
   }
 
-  /// دریافتِ کاملِ لیست از سرور (cold start، رویدادِ match، برگشتِ اتصال، تلاشِ دوباره).
+  /// دریافتِ کاملِ لیست از سرور (ورود به تبِ چت وقتی کثیفه، تلاشِ دوباره، کشیدنِ صفحه).
   Future<void> refresh() async {
     if (_refreshing) return;
     _refreshing = true;
@@ -90,6 +113,7 @@ class ConversationsStore extends ChangeNotifier {
       items = list;
       error = null;
       loading = false;
+      _dirty = false;
       _persist();
     } catch (_) {
       loading = false;
@@ -121,15 +145,15 @@ class ConversationsStore extends ChangeNotifier {
     final data = e.data;
     switch (e.type) {
       case 'connected':
-        if (data['reconnect'] == true) refresh(); // وقتی قطع بودیم ممکنه چیزی از دست رفته باشه
+        if (data['reconnect'] == true) _markDirty(); // وقتی قطع بودیم ممکنه چیزی از دست رفته باشه
         break;
       case 'match':
-        refresh(); // متچِ جدید: اسم و عکسش رو لازم داریم (رویدادِ نادر)
+        _markDirty(); // متچِ جدید: اسم و عکسش رو لازم داریم (رویدادِ نادر)
         break;
       case 'message':
         final i = _indexOf('${data['from']}');
         if (i < 0) {
-          refresh(); // گفتگوی ناشناخته
+          _markDirty(); // گفتگوی ناشناخته
           break;
         }
         items[i] = _copy(
@@ -192,6 +216,8 @@ class ConversationsStore extends ChangeNotifier {
     loading = true;
     error = null;
     _started = false;
+    _dirty = true;
+    visible = false;
     await _sub?.cancel();
     _sub = null;
     try {

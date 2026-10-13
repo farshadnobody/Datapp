@@ -88,6 +88,9 @@ class AppCounters extends ChangeNotifier {
 /// دوباره‌صدا زدن: وقتی اپ باز می‌شه، از پس‌زمینه برمی‌گرده، WebSocket بعد از قطعی وصل
 /// می‌شه، یا سرور خبر بده «تنظیمات/حساب عوض شد» (که با تأخیرِ تصادفی، تا ۲۰۰۰ نفر
 /// هم‌زمان نزنن).
+///
+/// دسته‌های اکسپلور جزوِ bootstrap نیستن: نسخه‌شون فقط موقعِ ورود به تبِ اکسپلور چک می‌شه
+/// ([refreshExplore]) و سرور براشون چیزی پخش نمی‌کنه.
 class BootstrapService {
   BootstrapService._();
   static final BootstrapService instance = BootstrapService._();
@@ -98,11 +101,14 @@ class BootstrapService {
   static const String optionsKey = 'bs_options_json';
   static const String _exploreKey = 'bs_explore_json';
   static const Duration _minGap = Duration(seconds: 20);
+  static const Duration _exploreGap = Duration(seconds: 60);
 
   Map<String, String> _versions = {};
   bool _loaded = false;
   bool _running = false;
   DateTime? _last;
+  DateTime? _lastExplore;
+  bool _exploreRunning = false;
   StreamSubscription? _sub;
   Timer? _jitterTimer;
 
@@ -114,7 +120,10 @@ class BootstrapService {
       switch (e.type) {
         case 'connected':
           if (e.data['reconnect'] == true) {
-            refresh();
+            // قطعیِ خیلی کوتاه (زیر ۱۰ ثانیه): احتمالاً config_changed/account_changed
+            // از دست نرفته؛ bootstrap لازم نیست (با برگشت از پس‌زمینه/باز شدنِ اپ هم می‌ره).
+            final downMs = (e.data['down_ms'] as num?)?.toInt() ?? 1 << 30;
+            if (downMs >= 10000) refresh();
             // فقط وقتی صفحه‌ی Likes باز/زنده‌ست؛ هیچ لود حجیمی تو bootstrap نیست.
             if (SubscriptionState.instance.isPremium && LikesStore.instance.screenOpen) {
               LikesStore.instance.refreshFirstPage();
@@ -191,7 +200,6 @@ class BootstrapService {
         promosVersion: _versions['promos'],
         plansVersion: _versions['plans'],
         optionsVersion: _versions['options'],
-        exploreVersion: _versions['explore'],
         // شمارنده‌ی لایک‌ها فقط وقتی خواسته می‌شه که از آخرین دریافتش یه ساعت گذشته باشه
         // (سرور برای اشتراکی‌ها هیچ‌وقت نمی‌فرستدش).
         likesCounts: AppCounters.instance.stale,
@@ -202,6 +210,59 @@ class BootstrapService {
       // شبکه/خطا: همون داده‌ی قبلی می‌مونه.
     } finally {
       _running = false;
+    }
+  }
+
+  /// چکِ نسخه‌ی اکسپلور: اگه وب‌سوکت وصله، همون‌جا می‌پرسه (explore_check) و جواب
+  /// (explore_config) رو از همون اتصال می‌گیره. اگه وصل نیست، نوشتن شکست بخوره، یا ظرفِ ۵
+  /// ثانیه جواب نیاد (مثلاً سرورِ قدیمی)، با HTTP (/api/explore-config) می‌پرسه.
+  Future<Map<String, dynamic>> _fetchExploreConfig(String? version) async {
+    final rt = RealtimeService.instance;
+    if (rt.connected.value) {
+      final reply = Completer<Map<String, dynamic>>();
+      final sub = rt.events.listen((e) {
+        if (e.type == 'explore_config' && !reply.isCompleted) reply.complete(e.data);
+      });
+      try {
+        final sent = rt.send({'type': 'explore_check', if (version != null) 'ev': version});
+        if (sent) return await reply.future.timeout(const Duration(seconds: 5));
+      } catch (_) {
+        // تایم‌اوت یا خطا: می‌ریم سراغِ HTTP.
+      } finally {
+        await sub.cancel();
+      }
+    }
+    return ApiClient.exploreConfig(version: version);
+  }
+
+  /// موقعِ ورود به تبِ اکسپلور (HomeScreen._select): نسخه‌ی ذخیره‌شده رو به سرور می‌فرسته؛
+  /// فقط اگه عوض شده باشه لیستِ جدید میاد و صفحه خودش دوباره ساخته می‌شه. بینِ دو چک
+  /// حداقل ۶۰ ثانیه فاصله‌ست تا رفت‌وبرگشتِ پشت‌سرهم درخواست نسازه.
+  Future<void> refreshExplore({bool force = false}) async {
+    if (_exploreRunning) return;
+    final last = _lastExplore;
+    if (!force && last != null && DateTime.now().difference(last) < _exploreGap) return;
+    _exploreRunning = true;
+    try {
+      await _loadCached();
+      final json = await _fetchExploreConfig(_versions['explore']);
+      final items = json['explore'];
+      final version = json['version'];
+      if (items is List) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_exploreKey, jsonEncode(items));
+        ExploreConfig.instance.apply(items);
+        // نسخه فقط بعد از اعمالِ موفقِ لیست ذخیره می‌شه.
+        if (version is String) {
+          _versions = {..._versions, 'explore': version};
+          await prefs.setString(_versionsKey, jsonEncode(_versions));
+        }
+      }
+      _lastExplore = DateTime.now();
+    } catch (_) {
+      // شبکه/خطا: همون لیستِ قبلی می‌مونه؛ ورودِ بعدی دوباره تلاش می‌کنه.
+    } finally {
+      _exploreRunning = false;
     }
   }
 
@@ -247,10 +308,9 @@ class BootstrapService {
       final opts = json['options'];
       if (opts is Map<String, dynamic>) applyProfileOptionOverrides(opts);
     }
-    if (json['explore'] is List) {
-      await prefs.setString(_exploreKey, jsonEncode(json['explore']));
-      ExploreConfig.instance.apply(json['explore'] as List);
-    }
+    // اکسپلور این‌جا نمیاد (نسخه‌ش جدا، موقعِ ورود به تب چک می‌شه)؛ نسخه‌ی اکسپلور هم
+    // نباید بدونِ دیتاش ذخیره بشه.
+    versions.remove('explore');
 
     // نسخه‌ها فقط بعد از اعمالِ موفق ذخیره می‌شن.
     _versions = {..._versions, ...versions};
@@ -262,6 +322,7 @@ class BootstrapService {
     _versions = {};
     _loaded = false;
     _last = null;
+    _lastExplore = null;
     _jitterTimer?.cancel();
     AppCounters.instance.clear();
     LikesStore.instance.clear();
