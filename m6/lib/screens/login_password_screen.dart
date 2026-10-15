@@ -106,21 +106,43 @@ class _LoginPasswordScreenState extends State<LoginPasswordScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const AuthTitle('رمز عبورت رو وارد کن'),
-          const SizedBox(height: 12),
-          Text(
-            widget.phone,
-            textDirection: TextDirection.ltr,
-            textAlign: TextAlign.start,
-            style: const TextStyle(
-              fontSize: 16,
-              color: AuthColors.secondaryText,
+          const SizedBox(height: 16),
+          // شماره‌ای که از مرحله‌ی قبل اومده — به شکل یه چیپ کوچیک با کد کشور.
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: AuthColors.fieldFill,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AuthColors.line, width: 1.2),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.phone_iphone,
+                      size: 16, color: AuthColors.hint),
+                  const SizedBox(width: 8),
+                  Text(
+                    '+98 ${widget.phone}',
+                    textDirection: TextDirection.ltr,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AuthColors.secondaryText,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 16),
-          AuthUnderlineField(
+          const SizedBox(height: 20),
+          AuthField(
             controller: _passwordController,
             hint: 'رمز عبور',
             obscureText: _obscure,
+            autofocus: false,
             textInputAction: TextInputAction.done,
             onChanged: (_) => setState(() {
               _errorText = null;
@@ -135,8 +157,9 @@ class _LoginPasswordScreenState extends State<LoginPasswordScreen> {
             ),
           ),
           if (_errorText != null) AuthErrorText(_errorText!),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
           const AuthBodyText('رمز عبورت رو نداری یا یادت رفته؟'),
+          const SizedBox(height: 4),
           Align(
             alignment: AlignmentDirectional.centerStart,
             child: TextButton(

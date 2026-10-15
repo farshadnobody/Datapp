@@ -81,12 +81,10 @@ class _CodeRequestScreenState extends State<CodeRequestScreen> {
         children: [
           AuthTitle(hasResult ? 'کدت آماده‌ست' : 'ثبت‌نام یا فراموشی رمز'),
           const SizedBox(height: 24),
-          AuthUnderlineField(
+          AuthPhoneField(
             controller: _phoneController,
-            hint: 'شماره موبایل',
             enabled: !hasResult,
-            keyboardType: TextInputType.phone,
-            inputFormatters: phoneInputFormatters,
+            autofocus: !hasResult,
             textInputAction: TextInputAction.done,
             onChanged: (_) => setState(() {
               _errorText = null;
@@ -117,8 +115,9 @@ class _CodeRequestScreenState extends State<CodeRequestScreen> {
         Container(
           padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            color: AuthColors.fieldFill,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AuthColors.red, width: 1.4),
           ),
           child: SelectableText(
             result.code,

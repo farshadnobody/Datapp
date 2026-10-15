@@ -21,10 +21,10 @@ const int kOnboardingMaxPromptAnswer = 150;
 /// همون کد رنگی نیست — کارت‌ها تقریباً مشکی، حاشیه‌ها خاکستری تیره، متن
 /// کم‌رنگ‌ها خاکستری روشن‌تر، و قرمز برند خودمون برای نوار پیشرفت).
 class _OB {
-  static const bg = Colors.black;
-  static const card = Color(0xFF121214);
-  static const border = Color(0xFF35353A);
-  static const muted = Color(0xFFA6A6AA);
+  static const bg = Color(0xFF12110F);
+  static const card = Color(0xFF24201F);
+  static const border = Color(0xFF3B3531);
+  static const muted = Color(0xFFB0A7A0);
   static const accent = AuthColors.red;
 }
 

@@ -3,7 +3,8 @@ import 'package:flutter/services.dart';
 import 'auth_ui.dart';
 import 'login_password_screen.dart';
 
-// مرحله‌ی اول ورود: شماره موبایل. بعد از «بعدی» می‌ره به مرحله‌ی رمز عبور.
+// مرحله‌ی اول ورود: شماره موبایل با کد کشور جدا. بعد از «بعدی» می‌ره به
+// مرحله‌ی رمز عبور.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -46,13 +47,9 @@ class _LoginScreenState extends State<LoginScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const AuthTitle('شماره موبایلت رو می‌دی؟'),
-          const SizedBox(height: 24),
-          AuthUnderlineField(
+          const SizedBox(height: 28),
+          AuthPhoneField(
             controller: _phoneController,
-            hint: 'شماره موبایل',
-            keyboardType: TextInputType.phone,
-            inputFormatters: phoneInputFormatters,
-            textInputAction: TextInputAction.next,
             onChanged: (_) => setState(() {}),
             onSubmitted: (_) => _next(),
           ),

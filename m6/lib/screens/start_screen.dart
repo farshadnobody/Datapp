@@ -8,9 +8,9 @@ import 'login_screen.dart';
 import 'code_request_screen.dart';
 
 // ───────────────────────── تنظیمات ظاهر انیمیشن ─────────────────────────
-// رنگ خود لوگو (از روی PNG نمونه‌گیری شده).
-const Color _kLogoRed = Color(0xFFF4473E);
-// گرادیانت نهایی (سبک تیندر): بالا صورتی، پایین نارنجی-قرمز.
+// رنگ خود لوگو قبل از سفید شدن — صورتیِ برند (هم‌رنگ سرِ گرادیانت).
+const Color _kLogoRed = Color(0xFFFD267A);
+// گرادیانت نهایی (سبک تیندر): بالا صورتی، پایین نارنجی.
 const Color _kGradTop = Color(0xFFFD267A);
 const Color _kGradBottom = Color(0xFFFF6036);
 // رنگ برق (درخشش) شامپاینی که موقع سفید شدن لوگو از روش رد می‌شه.
@@ -46,22 +46,75 @@ const double _kStarH = 407 / 2000;
 // ۳) یه برقِ مورب از روی لوگو رد می‌شه و پشت سرش لوگو سفید می‌شه
 // ۴) لوگو می‌ره بالا و دکمه‌ها میان
 // ۵) ستاره با یه چشمک ظاهر می‌شه
-const Duration _kIntroDuration = Duration(milliseconds: 5400);
-const Interval _kLogoIn = Interval(0.00, 0.14, curve: Curves.easeOutCubic);
-// لوگوی قرمز اول روی صفحه‌ی سفید خیلی کم‌رنگه (شفافیت [_kLogoGhost]) و وقتی
-// ماسک بهش می‌رسه کامل ظاهر می‌شه. بازه‌ی ظاهر شدن روی پیشرفتِ کوچیک شدنِ
-// ماسک (۰ تا ۱) تعریف شده، نه روی زمان کل.
-const double _kLogoGhost = 0.0;
-const Interval _kLogoReveal = Interval(1, 1, curve: Curves.easeOut);
-// کوچیک شدنِ ماسک: از خیلی بزرگ (صفحه‌ی سفید) تا هم‌اندازه‌ی لوگو.
-const Interval _kWave = Interval(0.10, 0.38, curve: Curves.easeInOutCubic);
-// داخلِ سوراخِ ماسک آخرِ کوچیک شدن با گرادیانت پر می‌شه (پشت لوگو).
-const Interval _kGradFill = Interval(0.34, 0.38, curve: Curves.easeIn);
-const Interval _kWipe = Interval(0.24, 0.55, curve: Curves.easeInOutCubic);
-const Interval _kMove = Interval(0.46, 0.72, curve: Curves.easeInOutCubic);
-const Interval _kTwinkle = Interval(0.70, 0.94);
+// ───────────────────────── زمان‌بندی انیمیشن (به میلی‌ثانیه) ─────────────────────────
+// هر بخش رو جدا تنظیم کن؛ مدت کل و بازه‌های کسریِ پایین خودکار حساب می‌شن.
+// ترتیب: تأخیر اولیه ← کوچیک شدنِ ماسک (+ محو شدن) ← مکث ← حرکت لوگو ←
+//        چشمک ستاره ← ظاهر شدنِ متن و دکمه‌ها.
+
+/// صفحه‌ی سفید قبل از شروعِ کوچیک شدنِ ماسک.
+const int _msDelay = 1;
+
+/// مدتِ کوچیک شدنِ ماسک و لوگو (از خیلی بزرگ تا اندازه‌ی عادی).
+const int _msMask = 1836;
+
+/// مدتِ دو برقِ مورب (محو شدنِ ماسک + ظاهر شدنِ لوگو). همیشه هم‌زمان با
+/// پایانِ کوچیک شدنِ ماسک تموم می‌شه؛ پس شروعش = پایان ماسک − این مقدار.
+/// نباید از _msDelay + _msMask بیشتر باشه.
+const int _msFade = 1080;
+
+/// مکثِ لوگوی سفید بعد از تموم شدنِ ماسک، قبل از رفتن به بالا.
+const int _msHold = 540;
+
+/// مدتِ حرکت (بالا رفتن و کوچیک شدن) لوگو.
+const int _msMove = 864;
+
+/// مدتِ چشمکِ ستاره.
+const int _msTwinkle = 810;
+
+/// ستاره این‌قدر قبل از تموم شدنِ حرکتِ لوگو شروع می‌شه (منفی = بعد از آن).
+const int _msTwinkleLead = 54;
+
+// ظاهر شدنِ متن و دکمه‌ها: (شروع نسبت به پایانِ حرکتِ لوگو، مدت). شروعِ منفی
+// یعنی قبل از تموم شدنِ حرکت.
+const int _msBtnMainAt = -162, _msBtnMainDur = 648; // دکمه‌ی «ادامه»
+const int _msBtnSecAt = 0, _msBtnSecDur = 702; // دکمه‌ی دوم
+const int _msTextAt = 216, _msTextDur = 648; // متن قوانین
+
+/// مکثِ آخر بعد از تموم شدنِ آخرین بخش (فقط برای زمانِ کل).
+const int _msTail = 0;
+
+// ───────────────────────── مقادیر خودکار؛ دست نزن ─────────────────────────
+const int _tMaskStart = _msDelay;
+const int _tMaskEnd = _tMaskStart + _msMask;
+const int _tMoveStart = _tMaskEnd + _msHold;
+const int _tMoveEnd = _tMoveStart + _msMove;
+const int _tTwinkleStart = _tMoveEnd - _msTwinkleLead;
+const int _tTwinkleEnd = _tTwinkleStart + _msTwinkle;
+const int _tBtnMainEnd = _tMoveEnd + _msBtnMainAt + _msBtnMainDur;
+const int _tBtnSecEnd = _tMoveEnd + _msBtnSecAt + _msBtnSecDur;
+const int _tTextEnd = _tMoveEnd + _msTextAt + _msTextDur;
+const int _tLastA = _tTwinkleEnd > _tTextEnd ? _tTwinkleEnd : _tTextEnd;
+const int _tLastB = _tBtnMainEnd > _tBtnSecEnd ? _tBtnMainEnd : _tBtnSecEnd;
+const int _tTotal = (_tLastA > _tLastB ? _tLastA : _tLastB) + _msTail;
+
+/// میلی‌ثانیه ← کسری از کلِ انیمیشن (۰ تا ۱).
+double _f(int ms) => ms / _tTotal;
+
+const Duration _kIntroDuration = Duration(milliseconds: _tTotal);
+final Interval _kWave =
+    Interval(_f(_tMaskStart), _f(_tMaskEnd), curve: Curves.easeInOutCubic);
+final Interval _kGradFill =
+    Interval(_f(_tMaskEnd - _msFade), _f(_tMaskEnd), curve: Curves.easeInOut);
+// پهنای لبه‌ی نرمِ دو برقِ مورب، نسبت به قطرِ لوگو.
+const double _kRevealSoft = 0.25;
+final Interval _kMove = Interval(_f(_tMoveStart), _f(_tMoveEnd),
+    curve: Curves.easeInOutCubic);
+final Interval _kTwinkle = Interval(_f(_tTwinkleStart), _f(_tTwinkleEnd));
 // کاربر لاگین‌شده بعد از سفید شدن لوگو مستقیم می‌ره صفحه‌ی بعد.
-const double _kHandoffAt = 0.55;
+final double _kHandoffAt = _f(_tMoveStart);
+// لمسِ دکمه‌ها وقتی فعال می‌شه که هر دو دکمه کامل ظاهر شدن.
+final double _kInteractAt =
+    _f(_tBtnMainEnd > _tBtnSecEnd ? _tBtnMainEnd : _tBtnSecEnd);
 
 // صفحه‌ی اول: انیمیشن لوگو (لوگوی قرمز ظاهر می‌شه، پس‌زمینه گرادیانت تیندری
 // می‌شه، یه برق از روی لوگو رد می‌شه و لوگو سفید می‌شه، لوگو می‌ره بالا،
@@ -238,12 +291,8 @@ class _StartScreenState extends State<StartScreen>
         final logoW = logoH * _kLogoAspect;
         final cy = ui.lerpDouble(h / 2, cy1, m)!;
 
-        // ورود لوگو: fade + یه بزرگ‌شدنِ خیلی کم.
-        final inP = _kLogoIn.transform(t);
-        final logoScale = ui.lerpDouble(0.94, 1.0, inP)!;
 
         // برقِ مورب: w از ۰ تا ۱ می‌ره؛ پشتِ برق لوگو سفیده، جلوش هنوز قرمز.
-        final wipe = _kWipe.transform(t);
 
         // چشمک ستاره (ثابت سر جای خودش، بدون چرخش):
         // ۱) از هیچی با یه فنر کوچیک ظاهر می‌شه ۲) یه بار نرم نفس می‌کشه.
@@ -256,10 +305,16 @@ class _StartScreenState extends State<StartScreen>
         final flare = math.sin(math.pi * (tw / 0.75).clamp(0.0, 1.0));
 
         final d = _drift.value;
-        final gradOpacity = _kGradFill.transform(t);
+        final fillP = _kGradFill.transform(t); // ۰..۱: برقِ پر شدنِ ماسک + ظاهر شدنِ لوگو
         final waveP = _kWave.transform(t);
-        final logoOpacity =
-            ui.lerpDouble(_kLogoGhost, 1.0, _kLogoReveal.transform(waveP))!;
+
+        // جعبه‌ی مشترکِ ماسک و لوگو: لوگو دقیقاً هم‌اندازه‌ی ماسکه و با اون
+        // کوچیک می‌شه. بعد از تموم شدن ماسک همون جعبه‌ی عادیِ لوگوئه.
+        final maskBox = waveP >= 1
+            ? Rect.fromCenter(
+                center: Offset(w / 2, cy), width: logoW, height: logoH)
+            : _maskRect(
+                p: waveP, w: w, h: h, cy: cy, logoW: logoW, logoH: logoH);
 
         // مرکز ستاره نسبت به جعبه‌ی لوگو + اندازه‌ی جعبه‌ی درخشش.
         final starCx = (_kStarLeft + _kStarW / 2) * logoW;
@@ -269,10 +324,17 @@ class _StartScreenState extends State<StartScreen>
         return Stack(
           fit: StackFit.expand,
           children: [
-            // ۱) گرادیانت نهایی (با حرکت خیلی آروم بعد از انیمیشن)
-            if (gradOpacity > 0)
-              Opacity(
-                opacity: gradOpacity,
+            // ۱) گرادیانت نهایی (با حرکت خیلی آروم بعد از انیمیشن). داخلِ
+            // سوراخِ ماسک با یه برقِ مورب از بالا-چپ تا پایین-راست پدیدار می‌شه.
+            if (fillP > 0)
+              _diagReveal(
+                p: fillP,
+                from: _Diag.topLeftToBottomRight,
+                center: maskBox.center,
+                boxW: maskBox.width,
+                boxH: maskBox.height,
+                behind: const Color(0xFFFFFFFF),
+                ahead: const Color(0x00FFFFFF),
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -287,29 +349,29 @@ class _StartScreenState extends State<StartScreen>
             // هم‌اندازه‌ی لوگو کوچیک می‌شه؛ داخلش سفیده (اول) و بعد با
             // گرادیانتِ لایه‌ی زیرش پر می‌شه.
             if (waveP > 0 && waveP < 1 && _mask != null)
-              _maskLayer(
-                p: waveP,
-                w: w,
-                h: h,
-                cy: cy,
-                logoW: logoW,
-                logoH: logoH,
-                drift: d,
-              ),
+              _maskLayer(rect: maskBox, drift: d, w: w, h: h),
             // ۲) لوگو + ستاره
             Positioned(
-              left: w / 2 - logoW / 2,
-              top: cy - logoH / 2,
-              width: logoW,
-              height: logoH,
-              child: Opacity(
-                opacity: logoOpacity,
-                child: Transform.scale(
-                  scale: logoScale,
+              left: maskBox.left,
+              top: maskBox.top,
+              width: maskBox.width,
+              height: maskBox.height,
+              child: Transform.scale(
+                  scale: 1.0, // اندازه‌ی لوگو از خودِ جعبه‌ی ماسک میاد
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      Positioned.fill(child: _logoLayer(wipe)),
+                      Positioned.fill(
+                        // ظاهر شدنِ لوگوی سفید: برقِ مورب از بالا-چپ تا
+                        // پایین-راست؛ جلوی برق نامرئی، پشتش سفیدِ کامل.
+                        child: _diagReveal(
+                          p: fillP,
+                          from: _Diag.topLeftToBottomRight,
+                          behind: const Color(0xFFFFFFFF),
+                          ahead: const Color(0x00FFFFFF),
+                          child: _logoLayer(1.0), // لوگو از اول سفیده
+                        ),
+                      ),
                       // درخشش و پرتوی چشمک (پشت ستاره)
                       if (flare > 0)
                         Positioned(
@@ -348,7 +410,6 @@ class _StartScreenState extends State<StartScreen>
                         ),
                     ],
                   ),
-                ),
               ),
             ),
             // ۴) متن و دکمه‌ها (فقط برای کاربر لاگین‌نکرده)
@@ -358,7 +419,7 @@ class _StartScreenState extends State<StartScreen>
                 right: 24,
                 bottom: 24 + safeBottom,
                 child: IgnorePointer(
-                  ignoring: t < 0.9,
+                  ignoring: t < _kInteractAt,
                   child: _bottomBlock(context, t),
                 ),
               ),
@@ -368,17 +429,15 @@ class _StartScreenState extends State<StartScreen>
     );
   }
 
-  // لایه‌ی ماسک: کل صفحه گرادیانتِ نهاییه، به‌جز یه سوراخ به شکل شعله که
-  // [p] از ۰ تا ۱ کوچیک می‌شه. در p=۰ سوراخ کل صفحه رو می‌پوشونه (صفحه سفید)
-  // و در p=۱ دقیقاً هم‌اندازه و هم‌جای لوگو (logoW×logoH) می‌شه.
-  Widget _maskLayer({
+  // جعبه‌ی ماسک (و لوگو) در پیشرفتِ [p] از ۰ تا ۱: اول خیلی بزرگ، و آخر
+  // دقیقاً هم‌اندازه و هم‌جای لوگو (logoW×logoH، مرکز: وسط صفحه و cy).
+  Rect _maskRect({
     required double p,
     required double w,
     required double h,
     required double cy,
     required double logoW,
     required double logoH,
-    required double drift,
   }) {
     final halfDiag = math.sqrt(w * w + h * h) / 2;
     // ضریب بزرگ‌نمایی اولیه نسبت به اندازه‌ی لوگو (کمی حاشیه‌ی اطمینان).
@@ -389,7 +448,17 @@ class _StartScreenState extends State<StartScreen>
     final ay = ui.lerpDouble(_kMaskAnchorY, 0.5, p)!;
     final mw = logoW * s;
     final mh = logoH * s;
-    final rect = Rect.fromLTWH(w / 2 - ax * mw, cy - ay * mh, mw, mh);
+    return Rect.fromLTWH(w / 2 - ax * mw, cy - ay * mh, mw, mh);
+  }
+
+  // لایه‌ی ماسک: کل صفحه گرادیانتِ نهاییه، به‌جز یه سوراخ به شکل شعله در
+  // جعبه‌ی [rect] (همون جعبه‌ی لوگو؛ پس لوگو دقیقاً داخل سوراخ می‌شینه).
+  Widget _maskLayer({
+    required Rect rect,
+    required double drift,
+    required double w,
+    required double h,
+  }) {
     return Positioned.fill(
       child: IgnorePointer(
         child: CustomPaint(
@@ -401,6 +470,49 @@ class _StartScreenState extends State<StartScreen>
           ),
         ),
       ),
+    );
+  }
+
+  // برقِ مورب برای ظاهر/محو شدن: [p] از ۰ تا ۱. پشتِ برق رنگِ [behind]
+  // (آلفای ماسک)، جلوش [ahead]. جهتِ برق با [from] مشخص می‌شه. اگه [center] و
+  // [boxW]/[boxH] داده بشه، برق نسبت به اون جعبه محاسبه می‌شه (برای لایه‌ی
+  // تمام‌صفحه)؛ وگرنه نسبت به خودِ child.
+  Widget _diagReveal({
+    required double p,
+    required _Diag from,
+    required Color behind,
+    required Color ahead,
+    required Widget child,
+    Offset? center,
+    double? boxW,
+    double? boxH,
+  }) {
+    if (p >= 1) return child; // برق تموم شده: همه‌جا «پشتِ برق» است
+    return ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (rect) {
+        final bw = boxW ?? rect.width;
+        final bh = boxH ?? rect.height;
+        final c = center ?? rect.center;
+        final dir = from == _Diag.topLeftToBottomRight
+            ? Offset(bw, bh)
+            : Offset(-bw, bh);
+        final len = dir.distance;
+        final u = dir / len;
+        final hb = len / 2; // نصفِ قطرِ جعبه
+        final soft = hb * _kRevealSoft;
+        // محورِ گرادیانت اونقدر بلند که کل صفحه رو بپوشونه.
+        final r = math.max(hb * 1.5, rect.size.longestSide);
+        final front = ui.lerpDouble(-hb - soft, hb + soft, p)!;
+        double st(double v) => ((v + r) / (2 * r)).clamp(0.0, 1.0);
+        return ui.Gradient.linear(
+          c - u * r,
+          c + u * r,
+          [behind, behind, ahead, ahead],
+          [0.0, st(front - soft), st(front + soft), 1.0],
+        );
+      },
+      child: child,
     );
   }
 
@@ -450,66 +562,63 @@ class _StartScreenState extends State<StartScreen>
     );
   }
 
-  // دکمه‌ها و متن‌ها دقیقاً همون صفحه‌ی قبلی هستن؛ فقط ورودشون انیمیت شده.
+  // دکمه‌ها و متن‌ها — ورودشون انیمیت شده. چیدمان مدرن: اول دکمه‌ی اصلی
+  // (سفید با هاله‌ی نرم)، بعد لینک دوم، و آخرِ کار متن کوچیکِ قوانین.
   Widget _bottomBlock(BuildContext context, double t) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // TODO: اگه صفحه‌ی قوانین/حریم خصوصی داری، به این متن لینک بده.
         _reveal(
           t,
-          0.78,
-          0.96,
-          const Text(
-            'با زدن «ادامه» قوانین و سیاست حریم خصوصی رو می‌پذیری.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              height: 1.6,
+          _f(_tMoveEnd + _msBtnMainAt),
+          _f(_tBtnMainEnd),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x59000000),
+                  blurRadius: 24,
+                  offset: Offset(0, 10),
+                ),
+              ],
             ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        _reveal(
-          t,
-          0.66,
-          0.86,
-          SizedBox(
-            height: 54,
-            child: ElevatedButton(
-              onPressed: () {
-                HapticFeedback.lightImpact();
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: AuthColors.text,
-                elevation: 0,
-                shape: const StadiumBorder(),
-                textStyle:
-                    const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.phone, size: 20),
-                  SizedBox(width: 12),
-                  Text('ادامه با شماره موبایل'),
-                ],
+            child: SizedBox(
+              height: 56,
+              child: ElevatedButton(
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: AuthColors.text,
+                  elevation: 0,
+                  shape: const StadiumBorder(),
+                  textStyle: const TextStyle(
+                      fontSize: 17, fontWeight: FontWeight.w700),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.phone, size: 20),
+                    SizedBox(width: 12),
+                    Text('ادامه با شماره موبایل'),
+                  ],
+                ),
               ),
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         _reveal(
           t,
-          0.72,
-          0.92,
+          _f(_tMoveEnd + _msBtnSecAt),
+          _f(_tBtnSecEnd),
           TextButton(
             onPressed: () {
               HapticFeedback.lightImpact();
@@ -527,10 +636,30 @@ class _StartScreenState extends State<StartScreen>
             child: const Text('ثبت‌نام یا فراموشی رمز؟'),
           ),
         ),
+        // TODO: اگه صفحه‌ی قوانین/حریم خصوصی داری، به این متن لینک بده.
+        _reveal(
+          t,
+          _f(_tMoveEnd + _msTextAt),
+          _f(_tTextEnd),
+          const Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: Text(
+              'با زدن «ادامه» قوانین و سیاست حریم خصوصی رو می‌پذیری.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Color(0xCCFFFFFF),
+                fontSize: 12.5,
+                height: 1.6,
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
 }
+
+enum _Diag { topLeftToBottomRight, topRightToBottomLeft }
 
 // گرادیانتِ تمام‌صفحه با یه سوراخ به شکل ماسک (dstOut = هرجا ماسک پُره،
 // گرادیانت پاک می‌شه). گرادیانت با مختصات صفحه محاسبه می‌شه تا دقیقاً با
