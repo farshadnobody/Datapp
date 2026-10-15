@@ -2,6 +2,7 @@ import 'firebase_options.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'auth_session.dart';
+import 'style/app_colors.dart';
 import 'screens/start_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/onboarding_flow.dart';
@@ -78,7 +79,25 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Dating App',
       navigatorKey: navigatorKey,
-      theme: ThemeData(primarySwatch: Colors.pink),
+      theme: ThemeData(
+        // تم سراسری از پالت اپ: پس‌زمینه‌ی گرمِ تیره و رنگ برند (صورتیِ
+        // گرادیانت شروع) برای ویجت‌های Material (دیالوگ، اسنک‌بار، سوییچ و...).
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: AppDark.accent,
+          brightness: Brightness.dark,
+          primary: AppDark.accent,
+          secondary: AppDark.accentEnd,
+          surface: AppDark.card,
+          error: AppDark.warning,
+        ),
+        scaffoldBackgroundColor: AppDark.bg,
+        dialogTheme: DialogThemeData(backgroundColor: AppDark.card),
+        snackBarTheme: SnackBarThemeData(
+          backgroundColor: AppDark.cardAlt,
+          contentTextStyle: const TextStyle(color: Colors.white),
+          behavior: SnackBarBehavior.floating,
+        ),
+      ),
       home: _initialScreen(),
       // این builder، کادر وضعیت اتصال رو بالای هر صفحه‌ای که تو اپ باز بشه
       // نشون می‌ده — نیازی نیست هر صفحه جدا این کار رو انجام بده.

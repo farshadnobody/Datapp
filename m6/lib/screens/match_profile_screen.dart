@@ -172,7 +172,7 @@ class _MatchProfileScreenState extends State<MatchProfileScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: AppDark.bg,
         body: SafeArea(
           bottom: false,
           child: Column(

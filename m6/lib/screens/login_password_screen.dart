@@ -125,7 +125,8 @@ class _LoginPasswordScreenState extends State<LoginPasswordScreen> {
                       size: 16, color: AuthColors.hint),
                   const SizedBox(width: 8),
                   Text(
-                    '+98 ${widget.phone}',
+                    // صفر اول رو نشون نمی‌دیم تا کنار «+98» تکراری نباشه.
+                    '+98 ${widget.phone.startsWith('0') ? widget.phone.substring(1) : widget.phone}',
                     textDirection: TextDirection.ltr,
                     style: const TextStyle(
                       fontSize: 15,

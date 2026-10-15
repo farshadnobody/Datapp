@@ -130,7 +130,7 @@ class SwipeActionBar extends StatelessWidget {
         final t = (p.pass * 1.4).clamp(0.0, 1.0).toDouble();
         final rest = dark ? SwipeColors.black : SwipeColors.buttonBg;
         final bg = Color.lerp(rest, SwipeColors.pass, t)!;
-        final fg = Color.lerp(Colors.white, const Color(0xFF101113), t)!;
+        final fg = Color.lerp(Colors.white, const Color(0xFF141110), t)!;
         return _CircleButton(
           size: size,
           background: bg,
@@ -209,7 +209,7 @@ class SwipeActionBar extends StatelessWidget {
                   width: 19,
                   height: 19,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1C1C1E),
+                    color: const Color(0xFF24201F),
                     shape: BoxShape.circle,
                     border: Border.all(color: SwipeColors.buttonBorder),
                   ),

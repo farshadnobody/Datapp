@@ -596,7 +596,8 @@ class _StartScreenState extends State<StartScreen>
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
-                  foregroundColor: AuthColors.text,
+                  // متن دکمه روی پس‌زمینه‌ی سفیده، پس تیره‌ی گرم.
+                  foregroundColor: const Color(0xFF24201F),
                   elevation: 0,
                   shape: const StadiumBorder(),
                   textStyle: const TextStyle(

@@ -903,7 +903,7 @@ class _Chip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = highlighted ? const Color(0xFF1C1C1E) : Colors.white;
+    final fg = highlighted ? const Color(0xFF24201F) : Colors.white;
     return Container(
       padding: EdgeInsets.symmetric(horizontal: icon == null ? 14 : 12, vertical: 8),
       decoration: BoxDecoration(

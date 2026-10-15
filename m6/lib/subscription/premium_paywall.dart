@@ -52,7 +52,7 @@ Future<void> showPremiumPaywall(BuildContext context, PaywallReason reason) {
   };
   return showModalBottomSheet(
     context: context,
-    backgroundColor: const Color(0xFF1C1C1E),
+    backgroundColor: const Color(0xFF24201F),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),

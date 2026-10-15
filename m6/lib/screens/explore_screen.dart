@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../explore/explore_category_screen.dart';
 import '../explore/explore_data.dart';
+import '../style/app_colors.dart';
 
 /// تب «اکسپلور» — دقیقاً شبیهِ صفحه‌ی Explore تیندر: یه گریدِ دوستونه‌ی
 /// تخت از تایل‌های خاکستریِ تیره، هرکدوم یه ایموجیِ بزرگ و عنوان؛ با تپ روی هر تایل، استکِ سواپِ مخصوصِ همون دسته باز می‌شه.
@@ -20,7 +21,7 @@ class ExploreScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final topPad = MediaQuery.of(context).padding.top;
     return ColoredBox(
-      color: Colors.black,
+      color: AppDark.bg,
       child: SafeArea(
         bottom: false,
         child: CustomScrollView(
@@ -93,7 +94,7 @@ class _ExploreTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFF1C1C1E),
+      color: const Color(0xFF24201F),
       borderRadius: BorderRadius.circular(20),
       clipBehavior: Clip.antiAlias,
       child: InkWell(

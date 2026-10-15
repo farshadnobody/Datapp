@@ -221,7 +221,7 @@ class _PopupCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = promo;
     return Material(
-      color: const Color(0xFF1C1C1E),
+      color: const Color(0xFF24201F),
       borderRadius: BorderRadius.circular(22),
       clipBehavior: Clip.antiAlias,
       elevation: 12,
@@ -237,8 +237,8 @@ class _PopupCard extends StatelessWidget {
                   child: AppNetworkImage(
                     p.imageUrl,
                     fit: BoxFit.cover,
-                    placeholderColor: const Color(0xFF2C2C2E),
-                    errorBuilder: (_) => const ColoredBox(color: Color(0xFF2C2C2E)),
+                    placeholderColor: const Color(0xFF24201F),
+                    errorBuilder: (_) => const ColoredBox(color: Color(0xFF24201F)),
                   ),
                 ),
               Padding(
@@ -337,8 +337,8 @@ class _BannerCard extends StatelessWidget {
                       child: AppNetworkImage(
                         p.imageUrl,
                         fit: BoxFit.cover,
-                        placeholderColor: const Color(0xFF2C2C2E),
-                        errorBuilder: (_) => const ColoredBox(color: Color(0xFF2C2C2E)),
+                        placeholderColor: const Color(0xFF24201F),
+                        errorBuilder: (_) => const ColoredBox(color: Color(0xFF24201F)),
                       ),
                     ),
                   ),

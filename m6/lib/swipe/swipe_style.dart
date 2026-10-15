@@ -14,19 +14,19 @@ const TextDirection kSwipeTextDirection = TextDirection.rtl;
 class SwipeColors {
   SwipeColors._();
 
-  static const Color black = Color(0xFF000000);
+  static const Color black = Color(0xFF12110F);
 
   /// رنگ ته کارت (زیر دکمه‌ها) که گرادیانت پایین کارت بهش می‌رسه.
-  static const Color cardBase = Color(0xFF101113);
+  static const Color cardBase = Color(0xFF141110);
 
-  static const Color like = Color(0xFFE9190C);
+  static const Color like = Color(0xFFFD267A);
   static const Color pass = Color(0xFFE9E9EA);
   static const Color superLike = Color(0xFF3D9CF0);
   static const Color superLikeSoft = Color(0xFF9AB9EA);
   static const Color rewind = Color(0xFFFFC629);
   static const Color rewindDisabled = Color(0xFF6E6E72);
 
-  static const Color buttonBg = Color(0xFF262628);
+  static const Color buttonBg = Color(0xFF2D2826);
   static const Color buttonBorder = Color(0x1FFFFFFF);
 
   static const Color pillBg = Color(0xFFF2EEEC);
@@ -37,13 +37,13 @@ class SwipeColors {
   static const Color chipBorder = Color(0x1FFFFFFF);
 
   static const Color navUnselected = Color(0xFFBDBDBD);
-  static const Color badgeRed = Color(0xFFCE130A);
+  static const Color badgeRed = Color(0xFFFD267A);
   static const Color bolt = Color(0xFFF4B0EC);
 
-  static const Color bannerTitle = Color(0xFF1C1C1E);
+  static const Color bannerTitle = Color(0xFF24201F);
   static const Color bannerSubtitle = Color(0xFF55555A);
   static const Color bannerRing = Color(0xFFF4D1CF);
-  static const Color bannerHeart = Color(0xFFCE130C);
+  static const Color bannerHeart = Color(0xFFFD267A);
 }
 
 /// اندازه‌ها (dp) — اسکرین‌شات‌ها روی صفحه‌ی ۷۲۰ پیکسلی (=۳۶۰dp) گرفته شدن.

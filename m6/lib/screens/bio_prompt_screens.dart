@@ -56,7 +56,7 @@ class _BioEditScreenState extends State<BioEditScreen> {
                 padding: const EdgeInsets.only(right: 16, top: 10, bottom: 10),
                 child: FilledButton(
                   style: FilledButton.styleFrom(
-                    backgroundColor: canSubmit ? Colors.white : const Color(0xFF2C2C2E),
+                    backgroundColor: canSubmit ? Colors.white : const Color(0xFF24201F),
                     foregroundColor: canSubmit ? Colors.black : const Color(0xFF636366),
                     shape: const StadiumBorder(),
                     padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -214,7 +214,7 @@ class _PromptAnswerScreenState extends State<PromptAnswerScreen> {
                 padding: const EdgeInsets.only(right: 16, top: 10, bottom: 10),
                 child: FilledButton(
                   style: FilledButton.styleFrom(
-                    backgroundColor: canSubmit ? Colors.white : const Color(0xFF2C2C2E),
+                    backgroundColor: canSubmit ? Colors.white : const Color(0xFF24201F),
                     foregroundColor: canSubmit ? Colors.black : const Color(0xFF636366),
                     shape: const StadiumBorder(),
                     padding: const EdgeInsets.symmetric(horizontal: 20),

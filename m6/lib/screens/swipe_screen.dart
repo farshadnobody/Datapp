@@ -615,7 +615,7 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
       builder: (dialogContext) => Directionality(
         textDirection: kSwipeTextDirection,
         child: Dialog(
-          backgroundColor: const Color(0xFF1C1C1E),
+          backgroundColor: const Color(0xFF24201F),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -640,7 +640,7 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
                       thumb: true,
                       width: 100,
                       height: 100,
-                      placeholderColor: const Color(0xFF2C2C2E),
+                      placeholderColor: const Color(0xFF24201F),
                     ),
                   ),
                 const SizedBox(height: 12),
@@ -809,7 +809,7 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
       builder: (dialogContext) => Directionality(
         textDirection: kSwipeTextDirection,
         child: AlertDialog(
-          backgroundColor: const Color(0xFF1C1C1E),
+          backgroundColor: const Color(0xFF24201F),
           title: const Text('جستجو با آیدی', style: TextStyle(color: Colors.white)),
           content: TextField(
             controller: controller,
@@ -859,7 +859,7 @@ class _SwipeScreenState extends State<SwipeScreen> with WidgetsBindingObserver {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF1C1C1E),
+      backgroundColor: const Color(0xFF24201F),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),

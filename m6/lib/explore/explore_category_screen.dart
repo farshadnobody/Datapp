@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../api_client.dart';
+import '../style/app_colors.dart';
 import '../models/match_models.dart';
 import '../models/profile_models.dart';
 import '../screens/matches_screen.dart';
@@ -398,7 +399,7 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
       builder: (dialogContext) => Directionality(
         textDirection: kSwipeTextDirection,
         child: Dialog(
-          backgroundColor: const Color(0xFF1C1C1E),
+          backgroundColor: const Color(0xFF24201F),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -414,7 +415,7 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
                   ClipOval(
                     child: AppNetworkImage('$backendBaseUrl${match.photoUrl}',
                         thumb: true,
-                        placeholderColor: const Color(0xFF2C2C2E),
+                        placeholderColor: const Color(0xFF24201F),
                         width: 100,
                         height: 100),
                   ),
@@ -467,7 +468,7 @@ class _ExploreCategoryScreenState extends State<ExploreCategoryScreen> {
     return Directionality(
       textDirection: kSwipeTextDirection,
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: AppDark.bg,
         body: Stack(
           clipBehavior: Clip.none,
           children: [

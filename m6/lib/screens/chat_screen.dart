@@ -388,7 +388,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: AppDark.bg,
         body: SafeArea(
           child: Column(
             children: [

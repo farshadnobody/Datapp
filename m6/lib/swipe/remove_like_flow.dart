@@ -23,7 +23,7 @@ Future<RemoveLikeResult> confirmAndRemoveLike(
     builder: (dialogContext) => Directionality(
       textDirection: kSwipeTextDirection,
       child: AlertDialog(
-        backgroundColor: const Color(0xFF1C1C1E),
+        backgroundColor: const Color(0xFF24201F),
         title: Text(
           wasSuper ? 'سوپرلایک ${c.name} برداشته بشه؟' : 'لایک ${c.name} برداشته بشه؟',
           style: const TextStyle(color: Colors.white),

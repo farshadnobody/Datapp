@@ -78,7 +78,7 @@ class _MatchesScreenState extends State<MatchesScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: AppDark.bg,
         body: SafeArea(child: _buildBody()),
       ),
     );

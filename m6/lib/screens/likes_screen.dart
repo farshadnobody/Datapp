@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../cache/card_resolver.dart';
+import '../style/app_colors.dart';
 import 'package:flutter/services.dart';
 import '../api_client.dart';
 import '../likes/likes_data.dart';
@@ -87,7 +88,7 @@ class _LikesScreenState extends State<LikesScreen> {
   void _showPaywallSheet() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1C1C1E),
+      backgroundColor: const Color(0xFF24201F),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -170,7 +171,7 @@ class _LikesScreenState extends State<LikesScreen> {
         child: Container(
           padding: const EdgeInsets.all(28),
           decoration: BoxDecoration(
-            color: const Color(0xFF1C1C1E),
+            color: const Color(0xFF24201F),
             borderRadius: BorderRadius.circular(24),
           ),
           child: Column(
@@ -193,7 +194,7 @@ class _LikesScreenState extends State<LikesScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE9190C),
+                    backgroundColor: const Color(0xFFFD267A),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
@@ -213,7 +214,7 @@ class _LikesScreenState extends State<LikesScreen> {
     HapticFeedback.lightImpact();
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1C1C1E),
+      backgroundColor: const Color(0xFF24201F),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -232,7 +233,7 @@ class _LikesScreenState extends State<LikesScreen> {
   Widget build(BuildContext context) {
     final topPad = MediaQuery.of(context).padding.top;
     return ColoredBox(
-      color: Colors.black,
+      color: AppDark.bg,
       child: SafeArea(
         bottom: false,
         child: FutureBuilder<List<LikeEntry>>(
@@ -499,15 +500,15 @@ class _LikeCard extends StatelessWidget {
                       )
                     : photoUrl.isEmpty
                     ? Container(
-                        color: const Color(0xFF2C2C2E),
+                        color: const Color(0xFF24201F),
                         child: const Icon(Icons.person, color: Color(0xFF48484A), size: 44),
                       )
                     : AppNetworkImage(
                         photoUrl,
                         thumb: true,
-                        placeholderColor: const Color(0xFF2C2C2E),
+                        placeholderColor: const Color(0xFF24201F),
                         errorBuilder: (_) => Container(
-                          color: const Color(0xFF2C2C2E),
+                          color: const Color(0xFF24201F),
                           child: const Icon(Icons.person, color: Color(0xFF48484A), size: 44),
                         ),
                       ),
@@ -622,12 +623,12 @@ class _LikeProfileDetail extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           photoUrl.isEmpty
-              ? Container(color: const Color(0xFF2C2C2E))
+              ? Container(color: const Color(0xFF24201F))
               : AppNetworkImage(
                   photoUrl,
                   progressive: true,
-                  placeholderColor: const Color(0xFF2C2C2E),
-                  errorBuilder: (_) => Container(color: const Color(0xFF2C2C2E)),
+                  placeholderColor: const Color(0xFF24201F),
+                  errorBuilder: (_) => Container(color: const Color(0xFF24201F)),
                 ),
           const Positioned.fill(
             child: DecoratedBox(
@@ -690,7 +691,7 @@ class _LikeProfileDetail extends StatelessWidget {
                 const SizedBox(width: 28),
                 _RoundActionButton(
                   icon: Icons.favorite,
-                  bg: const Color(0xFFE9190C),
+                  bg: const Color(0xFFFD267A),
                   onTap: busy ? () {} : onLike,
                 ),
               ],
@@ -869,7 +870,7 @@ class _CountChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
+        color: const Color(0xFF24201F),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
